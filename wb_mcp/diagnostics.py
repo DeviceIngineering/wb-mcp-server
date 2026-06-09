@@ -186,11 +186,18 @@ async def run_probes(client) -> list[dict[str, Any]]:
             }
         except httpx.HTTPStatusError as e:
             code = e.response.status_code
+            if code == 429:
+                # Лимит запросов — API доступен, токен работает. Не считаем ошибкой.
+                return {
+                    "category": category, "endpoint": endpoint, "ok": True,
+                    "rate_limited": True, "status_code": 429,
+                    "latency_ms": round((time.monotonic() - start) * 1000, 1),
+                    "note": "429: лимит запросов — API доступен",
+                }
             hint = {
                 401: "Токен не действует или нет доступа к категории",
                 403: "Доступ запрещён (проверьте права токена)",
                 404: "Эндпоинт не найден — возможно, WB изменил API!",
-                429: "Превышен лимит запросов",
             }.get(code, "")
             return {
                 "category": category, "endpoint": endpoint, "ok": False,
@@ -264,6 +271,10 @@ async def full_diagnostics(shop_id: str, shop_name: str, api_token: str, client)
             warnings.append(f"⛔ {p['category']}: 404 на {p['endpoint']} — возможно, WB изменил API")
         elif p.get("status_code") in (401, 403):
             warnings.append(f"⚠️ {p['category']}: нет доступа ({p['status_code']}) — проверьте права токена")
+        else:
+            warnings.append(f"⛔ {p['category']}: {p.get('status_code') or p.get('error', 'ошибка')}")
+    for p in ping_fail:
+        warnings.append(f"⛔ ping {p['category']}: {p.get('status_code') or p.get('error', 'недоступен')}")
 
     healthy = not ping_fail and not probe_fail and not token_info.get("expired")
 

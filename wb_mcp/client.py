@@ -29,7 +29,8 @@ ANALYTICS_BASE = "https://seller-analytics-api.wildberries.ru"
 PRICES_BASE = "https://discounts-prices-api.wildberries.ru"
 ADVERT_BASE = "https://advert-api.wildberries.ru"
 FEEDBACKS_BASE = "https://feedbacks-api.wildberries.ru"
-QUESTIONS_BASE = "https://questions-api.wildberries.ru"
+# Отдельного questions-хоста НЕ существует — вопросы на feedbacks-api
+QUESTIONS_BASE = FEEDBACKS_BASE
 RETURNS_BASE = "https://returns-api.wildberries.ru"
 TARIFFS_BASE = "https://common-api.wildberries.ru"
 BUYER_CHAT_BASE = "https://buyer-chat-api.wildberries.ru"
@@ -522,7 +523,7 @@ class WBClient:
         """
         body: dict[str, Any] = {
             "selectedPeriod": {"start": date_from, "end": date_to},
-            "orderBy": {"field": "ordersCount", "mode": "desc"},
+            "orderBy": {"field": "openCard", "mode": "desc"},
             "limit": limit, "offset": offset,
         }
         if nm_ids:
