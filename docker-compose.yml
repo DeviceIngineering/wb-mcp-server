@@ -1,0 +1,22 @@
+services:
+  wb-mcp:
+    build: .
+    container_name: wb-mcp-server
+    ports:
+      - "8001:8001"
+    volumes:
+      - wb_data:/data
+    environment:
+      - WB_API_TOKEN=${WB_API_TOKEN:-}
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
+      - HEALTH_CHECK_INTERVAL_MIN=${HEALTH_CHECK_INTERVAL_MIN:-30}
+      - PORT=8001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  wb_data:

@@ -1,0 +1,29 @@
+[project]
+name = "wb-mcp-server"
+version = "2.0.0"
+description = "MCP-сервер для Wildberries Seller API (товары, цены, заказы, финансы, реклама, аналитика, акции, FBW, диагностика)"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "jinja2>=3.1.0",
+    "aiosqlite>=0.20.0",
+    "cryptography>=43.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["wb_mcp"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+wb-mcp = "wb_mcp.server:main"
+wb-mcp-web = "wb_mcp.app:main"
