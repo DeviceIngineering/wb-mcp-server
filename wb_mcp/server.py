@@ -197,29 +197,49 @@ TOOLS = [
           {"nm_id": {"type": "integer"}, "limit": {"type": "integer", "default": 100}},
           ["nm_id"]),
 
-    # === АКЦИИ (КАЛЕНДАРЬ ПРОМО) ===
+    # === АКЦИИ И АВТОАКЦИИ (КАЛЕНДАРЬ ПРОМО) ===
     _tool("wb_promotions_list",
-          "[P0] Список акций WB за период. КРИТИЧНО: WB автоматически добавляет товары в некоторые акции — мониторь регулярно!",
+          "[P0] Список акций WB за период. type акции: 'auto' = АВТОАКЦИЯ (WB добавляет товары сам!), 'regular' = обычная. КРИТИЧНО: мониторь автоакции регулярно.",
           {"start": {"type": "string", "description": "RFC3339 (2026-06-01T00:00:00Z)"},
            "end": {"type": "string", "description": "RFC3339"},
-           "all_promo": {"type": "boolean", "default": False, "description": "false = только доступные для участия"}},
+           "all_promo": {"type": "boolean", "default": False, "description": "false = только доступные для участия, true = все"},
+           "promo_type": {"type": "string", "enum": ["auto", "regular"], "description": "Фильтр по типу: auto | regular (опц.)"},
+           "limit": {"type": "integer", "default": 1000, "description": "1–1000"},
+           "offset": {"type": "integer", "default": 0}},
+          ["start", "end"]),
+    _tool("wb_promotions_auto",
+          "[P0] ТОЛЬКО автоакции (type=auto) за период — WB добавляет товары автоматически. Используй для регулярного мониторинга, чтобы цены не упали без твоего ведома.",
+          {"start": {"type": "string", "description": "RFC3339"},
+           "end": {"type": "string", "description": "RFC3339"}},
+          ["start", "end"]),
+    _tool("wb_promotions_audit",
+          "[P0] Аудит участия: в какие акции WB УЖЕ добавил мои товары и каков ценовой эффект (price→planPrice, % падения, скидка). ВАЖНО: для автоакций состав товаров WB через API не отдаёт (помечаются nomenclaturesAvailable=false) — контроль цен через wb_prices_list/wb_prices_quarantine. Авто-throttle под лимит 10 req/6 сек.",
+          {"start": {"type": "string", "description": "RFC3339"},
+           "end": {"type": "string", "description": "RFC3339"},
+           "only_auto": {"type": "boolean", "default": False, "description": "true = только автоакции (состав недоступен); false = все акции"},
+           "max_promotions": {"type": "integer", "default": 25, "description": "Сколько акций проверить (защита от лимита)"}},
           ["start", "end"]),
     _tool("wb_promotions_details",
-          "[P1] Детали акций: даты, условия участия, процент скидки, бонусы.",
+          "[P1] Детали акций: даты, условия (ranging/boost), слоты участников, participationPercentage, бонусы (advantages), type.",
           {"promotion_ids": {"type": "array", "items": {"type": "integer"}}},
           ["promotion_ids"]),
     _tool("wb_promotions_products",
-          "[P1] Товары, подходящие для акции. in_action: true = уже участвуют, false = не участвуют.",
+          "[P1] Товары, подходящие для акции. in_action: true = уже участвуют, false = не участвуют. Возвращает price/planPrice и discount/planDiscount.",
           {"promotion_id": {"type": "integer"},
            "in_action": {"type": "boolean", "description": "Фильтр участия (опц.)"},
-           "limit": {"type": "integer", "default": 100}},
+           "limit": {"type": "integer", "default": 1000, "description": "1–1000"},
+           "offset": {"type": "integer", "default": 0}},
           ["promotion_id"]),
     _tool("wb_promotions_add_products",
-          "[P1] Добавить товары в акцию. upload_now=false — отложенно (применится при старте акции). ВЫХОД из акции — через wb_prices_set (восстановление цены), отдельного эндпоинта нет.",
+          "[P1] Добавить товары в акцию. upload_now=false — отложенно (применится при старте акции). Возвращает uploadID для отслеживания.",
           {"promotion_id": {"type": "integer"},
            "nm_ids": {"type": "array", "items": {"type": "integer"}},
            "upload_now": {"type": "boolean", "default": True}},
           ["promotion_id", "nm_ids"]),
+    _tool("wb_promotion_exit",
+          "[P0] Выйти из акции/автоакции — восстановить цену и скидку (отдельного API выхода у WB нет, делается через Prices API).",
+          {"data": {"type": "array", "items": {"type": "object"}, "description": "[{nmID, price, discount}, ...] — доакционные значения"}},
+          ["data"]),
 
     # === P0: ФИНАНСЫ И РЕАЛИЗАЦИЯ ===
     _tool("wb_finance_report",
@@ -308,6 +328,232 @@ TOOLS = [
           {"advert_id": {"type": "integer"}, "nm_id": {"type": "integer", "description": "Артикул"},
            "norm_queries": {"type": "array", "items": {"type": "string"}, "description": "Установить минус-фразы (опц.; без него — чтение)"}},
           ["advert_id"]),
+    _tool("wb_advert_payments",
+          "[P1] История пополнений рекламного счёта за период (даты YYYY-MM-DD).",
+          {"date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"}},
+          ["date_from", "date_to"]),
+    _tool("wb_advert_rename",
+          "[P2] Переименовать рекламную кампанию.",
+          {"advert_id": {"type": "integer"}, "name": {"type": "string"}},
+          ["advert_id", "name"]),
+
+    # === КОНТЕНT: расширение ===
+    _tool("wb_cards_move_nm",
+          "[P2] Объединить/разъединить карточки (≤30 nmID). target_imt задан = объединить в этот imtID; не задан = разъединить.",
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}},
+           "target_imt": {"type": "integer", "description": "imtID для объединения (опц.; без него — разъединение)"}},
+          ["nm_ids"]),
+    _tool("wb_card_add_nomenclature",
+          "[P2] Добавить номенклатуру/размер в существующую карточку (по imtID).",
+          {"imt_id": {"type": "integer"},
+           "cards_to_add": {"type": "array", "items": {"type": "object"}, "description": "Массив новых номенклатур"}},
+          ["imt_id", "cards_to_add"]),
+    _tool("wb_categories_parent",
+          "[P2] Все родительские категории товаров.",
+          {"locale": {"type": "string", "description": "ru | en | zh (по умолч. ru)"}}),
+    _tool("wb_media_upload_file",
+          "[P1] Загрузить медиа ФАЙЛОМ по ссылке (сервер скачает и отправит). photo_number с 1; видео = 1; новое фото — номер больше уже загруженных.",
+          {"nm_id": {"type": "integer"}, "photo_number": {"type": "integer"},
+           "file_url": {"type": "string", "description": "URL файла для скачивания"}},
+          ["nm_id", "photo_number", "file_url"]),
+
+    # === FBS: маркировка (КИЗ), пропуска, короба ===
+    _tool("wb_order_meta_get",
+          "[P1] Метаданные/маркировка заказа FBS (доступные ключи — из requiredMeta заказа).",
+          {"order_id": {"type": "integer"}}, ["order_id"]),
+    _tool("wb_order_meta_set",
+          "[P0] Задать маркировку заказа FBS: meta_type = sgtin|uin|imei|gtin|expiration. Только в статусе confirm. КРИТИЧНО для маркированных товаров.",
+          {"order_id": {"type": "integer"},
+           "meta_type": {"type": "string", "enum": ["sgtin", "uin", "imei", "gtin", "expiration"]},
+           "value": {"description": "sgtin — массив Data Matrix; uin/imei/gtin — строка; expiration — dd.mm.yyyy"}},
+          ["order_id", "meta_type", "value"]),
+    _tool("wb_order_meta_delete",
+          "[P2] Удалить метаданные заказа FBS по ключу (imei|uin|gtin|sgtin).",
+          {"order_id": {"type": "integer"}, "key": {"type": "string"}},
+          ["order_id", "key"]),
+    _tool("wb_orders_status_history",
+          "[P2] История статусов заказов (трансграничные, ≤100).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_orders_client_info",
+          "[P2] Данные покупателя (трансграничные заказы из Турции).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_supplies_reshipment",
+          "[P1] Заказы, требующие повторной отгрузки (reshipment)."),
+    _tool("wb_orders_external_stickers",
+          "[P2] Стикеры трансграничной доставки (≤100, статус complete).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_passes_offices",
+          "[P2] Офисы/склады, требующие пропуск."),
+    _tool("wb_passes_list",
+          "[P2] Список действующих пропусков на склад."),
+    _tool("wb_pass_create",
+          "[P2] Создать пропуск на склад (действует 48 ч).",
+          {"first_name": {"type": "string"}, "last_name": {"type": "string"},
+           "car_model": {"type": "string"}, "car_number": {"type": "string"}, "office_id": {"type": "integer"}},
+          ["first_name", "last_name", "car_model", "car_number", "office_id"]),
+    _tool("wb_pass_update",
+          "[P2] Обновить пропуск.",
+          {"pass_id": {"type": "integer"}, "first_name": {"type": "string"}, "last_name": {"type": "string"},
+           "car_model": {"type": "string"}, "car_number": {"type": "string"}, "office_id": {"type": "integer"}},
+          ["pass_id", "first_name", "last_name", "car_model", "car_number", "office_id"]),
+    _tool("wb_pass_delete",
+          "[P2] Удалить пропуск.",
+          {"pass_id": {"type": "integer"}}, ["pass_id"]),
+    _tool("wb_supply_trbx_list",
+          "[P2] Короба (trbx) поставки FBS.",
+          {"supply_id": {"type": "string"}}, ["supply_id"]),
+    _tool("wb_supply_trbx_add",
+          "[P2] Добавить короба в поставку (amount 1..1000, только ПВЗ при сборке).",
+          {"supply_id": {"type": "string"}, "amount": {"type": "integer"}},
+          ["supply_id", "amount"]),
+    _tool("wb_supply_trbx_delete",
+          "[P2] Удалить короба из поставки.",
+          {"supply_id": {"type": "string"}, "trbx_ids": {"type": "array", "items": {"type": "string"}}},
+          ["supply_id", "trbx_ids"]),
+    _tool("wb_supply_trbx_stickers",
+          "[P2] QR-стикеры коробов (svg|zplv|zplh|png).",
+          {"supply_id": {"type": "string"}, "trbx_ids": {"type": "array", "items": {"type": "string"}},
+           "sticker_type": {"type": "string", "enum": ["svg", "zplv", "zplh", "png"]}},
+          ["supply_id", "trbx_ids"]),
+
+    # === DBS: доставка силами продавца ===
+    _tool("wb_dbs_orders_new", "[P1] Новые DBS-заказы (ожидают сборки)."),
+    _tool("wb_dbs_orders",
+          "[P1] Завершённые DBS-заказы (Unix-таймстампы, ≤30 дней, курсор next).",
+          {"limit": {"type": "integer", "default": 100}, "next": {"type": "integer", "default": 0},
+           "date_from": {"type": "integer", "description": "Unix ts"}, "date_to": {"type": "integer"}},
+          ["date_from", "date_to"]),
+    _tool("wb_dbs_orders_status",
+          "[P1] Статусы DBS-заказов (≤1000).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_dbs_orders_client",
+          "[P1] Данные покупателя DBS (после confirm).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_dbs_orders_delivery_date",
+          "[P1] Выбранные покупателем дата/время доставки DBS (≤1000).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_dbs_groups_info",
+          "[P2] Стоимость платной доставки по groupId (≤1000).",
+          {"group_ids": {"type": "array", "items": {"type": "string"}}}, ["group_ids"]),
+    _tool("wb_dbs_order_action",
+          "[P0] Сменить статус DBS-заказа: action = confirm|deliver|receive|reject|cancel. receive/reject требуют code покупателя.",
+          {"order_id": {"type": "integer"},
+           "action": {"type": "string", "enum": ["confirm", "deliver", "receive", "reject", "cancel"]},
+           "code": {"type": "string", "description": "Код подтверждения (для receive/reject)"}},
+          ["order_id", "action"]),
+    _tool("wb_dbs_order_meta_get",
+          "[P2] Метаданные DBS-заказа.",
+          {"order_id": {"type": "integer"}}, ["order_id"]),
+    _tool("wb_dbs_order_meta_set",
+          "[P1] Маркировка DBS-заказа: sgtin|uin|imei|gtin (статус confirm).",
+          {"order_id": {"type": "integer"},
+           "meta_type": {"type": "string", "enum": ["sgtin", "uin", "imei", "gtin"]},
+           "value": {"description": "sgtin — массив; остальное — строка"}},
+          ["order_id", "meta_type", "value"]),
+    _tool("wb_dbs_order_meta_delete",
+          "[P2] Удалить метаданные DBS-заказа по ключу.",
+          {"order_id": {"type": "integer"}, "key": {"type": "string"}}, ["order_id", "key"]),
+
+    # === CLICK-COLLECT: самовывоз ===
+    _tool("wb_cc_orders_new", "[P1] Новые задания самовывоза."),
+    _tool("wb_cc_orders",
+          "[P1] Завершённые задания самовывоза (Unix-таймстампы, ≤30 дней).",
+          {"limit": {"type": "integer", "default": 100}, "next": {"type": "integer", "default": 0},
+           "date_from": {"type": "integer", "description": "Unix ts"}, "date_to": {"type": "integer"}},
+          ["date_from", "date_to"]),
+    _tool("wb_cc_orders_status",
+          "[P1] Статусы заданий самовывоза.",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_cc_orders_client",
+          "[P1] Данные покупателя (статусы confirm/prepare).",
+          {"order_ids": {"type": "array", "items": {"type": "integer"}}}, ["order_ids"]),
+    _tool("wb_cc_order_identity",
+          "[P0] Проверить код покупателя при выдаче самовывоза.",
+          {"order_code": {"type": "string"}, "passcode": {"type": "string"}},
+          ["order_code", "passcode"]),
+    _tool("wb_cc_order_action",
+          "[P0] Сменить статус задания самовывоза: action = confirm|prepare|receive|reject|cancel.",
+          {"order_id": {"type": "integer"},
+           "action": {"type": "string", "enum": ["confirm", "prepare", "receive", "reject", "cancel"]}},
+          ["order_id", "action"]),
+    _tool("wb_cc_order_meta_get",
+          "[P2] Метаданные задания самовывоза.",
+          {"order_id": {"type": "integer"}}, ["order_id"]),
+    _tool("wb_cc_order_meta_set",
+          "[P1] Маркировка задания самовывоза: sgtin|uin|imei|gtin (статус confirm).",
+          {"order_id": {"type": "integer"},
+           "meta_type": {"type": "string", "enum": ["sgtin", "uin", "imei", "gtin"]},
+           "value": {"description": "sgtin — массив; остальное — строка"}},
+          ["order_id", "meta_type", "value"]),
+    _tool("wb_cc_order_meta_delete",
+          "[P2] Удалить метаданные задания самовывоза по ключу.",
+          {"order_id": {"type": "integer"}, "key": {"type": "string"}}, ["order_id", "key"]),
+
+    # === АНАЛИТИКА: расширение ===
+    _tool("wb_analytics_brand_share",
+          "[P1] Доля бренда в категории (≤365 дней). Нужны parentId и brand из wb_analytics_brand_share_parents/brands.",
+          {"parent_id": {"type": "integer"}, "brand": {"type": "string"},
+           "date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"}},
+          ["parent_id", "brand", "date_from", "date_to"]),
+    _tool("wb_analytics_brand_share_brands",
+          "[P2] Бренды продавца (продавались за 90 дней) — для brand-share."),
+    _tool("wb_analytics_brand_share_parents",
+          "[P2] Родительские категории бренда — для brand-share.",
+          {"brand": {"type": "string"}, "date_from": {"type": "string"}, "date_to": {"type": "string"},
+           "locale": {"type": "string", "description": "ru|en|zh"}},
+          ["brand", "date_from", "date_to"]),
+    _tool("wb_analytics_region_sale",
+          "[P1] Продажи по регионам (≤31 дня, YYYY-MM-DD).",
+          {"date_from": {"type": "string"}, "date_to": {"type": "string"}},
+          ["date_from", "date_to"]),
+    _tool("wb_analytics_goods_labeling",
+          "[P1] Удержания за отсутствие обязательной маркировки (≤31 дня, с фото нарушений).",
+          {"date_from": {"type": "string"}, "date_to": {"type": "string"}},
+          ["date_from", "date_to"]),
+    _tool("wb_search_table_details",
+          "[P1] Поисковая аналитика по товарам (позиции/конверсии по запросам). ТРЕБУЕТ подписку Джем.",
+          {"body": {"type": "object", "description": "{currentPeriod{start,end}, orderBy{field,mode}, positionCluster, limit, offset, ...}"}},
+          ["body"]),
+    _tool("wb_search_table_groups",
+          "[P1] Поисковая аналитика по группам (предмет/бренд/тег). ТРЕБУЕТ подписку Джем.",
+          {"body": {"type": "object", "description": "{currentPeriod{start,end}, orderBy, positionCluster, limit, offset, ...}"}},
+          ["body"]),
+    _tool("wb_search_product_orders",
+          "[P1] Заказы и позиции по поисковым запросам для товара (≤7 дней). ТРЕБУЕТ подписку Джем.",
+          {"nm_id": {"type": "integer"}, "search_texts": {"type": "array", "items": {"type": "string"}, "description": "1..30 запросов"},
+           "date_from": {"type": "string"}, "date_to": {"type": "string"}},
+          ["nm_id", "search_texts", "date_from", "date_to"]),
+
+    # === ОТЗЫВЫ/ВОПРОСЫ: расширение ===
+    _tool("wb_new_feedbacks_questions",
+          "[P1] Флаги непросмотренных отзывов/вопросов (hasNewFeedbacks/hasNewQuestions) — для регулярного мониторинга."),
+    _tool("wb_feedbacks_actions",
+          "[P2] Жалоба на отзыв / сообщить о проблеме товара (коды из supplier-valuations).",
+          {"feedback_id": {"type": "string"},
+           "feedback_valuation": {"type": "integer", "description": "Причина жалобы на отзыв (опц.)"},
+           "product_valuation": {"type": "integer", "description": "Проблема товара (опц.)"}},
+          ["feedback_id"]),
+    _tool("wb_question_get",
+          "[P2] Один вопрос покупателя по ID.",
+          {"question_id": {"type": "string"}}, ["question_id"]),
+    _tool("wb_feedback_order_return",
+          "[P1] Запросить возврат товара по отзыву (только если isAbleReturnProductOrders=true).",
+          {"feedback_id": {"type": "string"}}, ["feedback_id"]),
+    _tool("wb_feedbacks_count_period",
+          "[P2] Число отзывов за период (Unix ts, фильтр isAnswered). Отличие от wb_feedbacks_count (неотвеченные).",
+          {"date_from": {"type": "integer", "description": "Unix ts (опц.)"}, "date_to": {"type": "integer"},
+           "is_answered": {"type": "boolean"}}),
+    _tool("wb_questions_count_period",
+          "[P2] Число вопросов за период (Unix ts, фильтр isAnswered). Отличие от wb_questions_count (неотвеченные).",
+          {"date_from": {"type": "integer", "description": "Unix ts (опц.)"}, "date_to": {"type": "integer"},
+           "is_answered": {"type": "boolean"}}),
+
+    # === РЕКЛАМА: расширение ===
+    _tool("wb_advert_subjects",
+          "[P2] Предметы, доступные для рекламных кампаний."),
+    _tool("wb_advert_available_nms",
+          "[P2] Товары (nm), доступные для кампаний, по ID предметов.",
+          {"subject_ids": {"type": "array", "items": {"type": "integer"}}}, ["subject_ids"]),
 
     # === P0: ТАРИФЫ ЛОГИСТИКИ И ХРАНЕНИЯ ===
     _tool("wb_tariffs_box",
@@ -686,11 +932,22 @@ async def _call_tool_impl(name: str, arguments: dict) -> list[TextContent]:
     if name == "wb_prices_size_list":
         return _json(await c.prices_size_list(arguments["nm_id"], limit=arguments.get("limit", 100)))
 
-    # ── Акции (календарь промо) ───────────────────────────
+    # ── Акции и автоакции (календарь промо) ───────────────
     if name == "wb_promotions_list":
         return _json(await c.promotions_list(
             arguments["start"], arguments["end"],
             all_promo=arguments.get("all_promo", False),
+            limit=arguments.get("limit", 1000),
+            offset=arguments.get("offset", 0),
+            promo_type=arguments.get("promo_type"),
+        ))
+    if name == "wb_promotions_auto":
+        return _json(await c.promotions_auto(arguments["start"], arguments["end"]))
+    if name == "wb_promotions_audit":
+        return _json(await c.promotions_audit(
+            arguments["start"], arguments["end"],
+            only_auto=arguments.get("only_auto", False),
+            max_promotions=arguments.get("max_promotions", 25),
         ))
     if name == "wb_promotions_details":
         return _json(await c.promotions_details(arguments["promotion_ids"]))
@@ -698,13 +955,16 @@ async def _call_tool_impl(name: str, arguments: dict) -> list[TextContent]:
         return _json(await c.promotions_nomenclatures(
             arguments["promotion_id"],
             in_action=arguments.get("in_action"),
-            limit=arguments.get("limit", 100),
+            limit=arguments.get("limit", 1000),
+            offset=arguments.get("offset", 0),
         ))
     if name == "wb_promotions_add_products":
         return _json(await c.promotions_upload(
             arguments["promotion_id"], arguments["nm_ids"],
             upload_now=arguments.get("upload_now", True),
         ))
+    if name == "wb_promotion_exit":
+        return _json(await c.promotions_exit(arguments["data"]))
 
     # ── Финансы ───────────────────────────────────────────
     if name == "wb_finance_report":
@@ -769,6 +1029,146 @@ async def _call_tool_impl(name: str, arguments: dict) -> list[TextContent]:
                 arguments["advert_id"], arguments["nm_id"], arguments["norm_queries"],
             ))
         return _json(await c.advert_minus_phrases_get(arguments["advert_id"], nm_id=arguments.get("nm_id")))
+    if name == "wb_advert_payments":
+        return _json(await c.advert_payments(arguments["date_from"], arguments["date_to"]))
+    if name == "wb_advert_rename":
+        return _json(await c.advert_rename(arguments["advert_id"], arguments["name"]))
+    if name == "wb_advert_subjects":
+        return _json(await c.advert_subjects())
+    if name == "wb_advert_available_nms":
+        return _json(await c.advert_available_nms(arguments["subject_ids"]))
+
+    # ── Контент: расширение ───────────────────────────────
+    if name == "wb_cards_move_nm":
+        return _json(await c.cards_move_nm(arguments["nm_ids"], target_imt=arguments.get("target_imt")))
+    if name == "wb_card_add_nomenclature":
+        return _json(await c.card_add_nomenclature(arguments["imt_id"], arguments["cards_to_add"]))
+    if name == "wb_categories_parent":
+        return _json(await c.categories_parent(locale=arguments.get("locale", "ru")))
+    if name == "wb_media_upload_file":
+        return _json(await c.media_upload_file(arguments["nm_id"], arguments["photo_number"], arguments["file_url"]))
+
+    # ── FBS: маркировка, пропуска, короба ─────────────────
+    if name == "wb_order_meta_get":
+        return _json(await c.order_meta_get(arguments["order_id"]))
+    if name == "wb_order_meta_set":
+        return _json(await c.order_meta_set(arguments["order_id"], arguments["meta_type"], arguments["value"]))
+    if name == "wb_order_meta_delete":
+        return _json(await c.order_meta_delete(arguments["order_id"], arguments["key"]))
+    if name == "wb_orders_status_history":
+        return _json(await c.orders_status_history(arguments["order_ids"]))
+    if name == "wb_orders_client_info":
+        return _json(await c.orders_client_info(arguments["order_ids"]))
+    if name == "wb_supplies_reshipment":
+        return _json(await c.supplies_reshipment())
+    if name == "wb_orders_external_stickers":
+        return _json(await c.orders_external_stickers(arguments["order_ids"]))
+    if name == "wb_passes_offices":
+        return _json(await c.passes_offices())
+    if name == "wb_passes_list":
+        return _json(await c.passes_list())
+    if name == "wb_pass_create":
+        return _json(await c.pass_create(arguments["first_name"], arguments["last_name"],
+                                         arguments["car_model"], arguments["car_number"], arguments["office_id"]))
+    if name == "wb_pass_update":
+        return _json(await c.pass_update(arguments["pass_id"], arguments["first_name"], arguments["last_name"],
+                                         arguments["car_model"], arguments["car_number"], arguments["office_id"]))
+    if name == "wb_pass_delete":
+        return _json(await c.pass_delete(arguments["pass_id"]))
+    if name == "wb_supply_trbx_list":
+        return _json(await c.supply_trbx_list(arguments["supply_id"]))
+    if name == "wb_supply_trbx_add":
+        return _json(await c.supply_trbx_add(arguments["supply_id"], arguments["amount"]))
+    if name == "wb_supply_trbx_delete":
+        return _json(await c.supply_trbx_delete(arguments["supply_id"], arguments["trbx_ids"]))
+    if name == "wb_supply_trbx_stickers":
+        return _json(await c.supply_trbx_stickers(arguments["supply_id"], arguments["trbx_ids"],
+                                                  sticker_type=arguments.get("sticker_type", "png")))
+
+    # ── DBS: доставка силами продавца ─────────────────────
+    if name == "wb_dbs_orders_new":
+        return _json(await c.dbs_orders_new())
+    if name == "wb_dbs_orders":
+        return _json(await c.dbs_orders(arguments.get("limit", 100), arguments.get("next", 0),
+                                        arguments["date_from"], arguments["date_to"]))
+    if name == "wb_dbs_orders_status":
+        return _json(await c.dbs_orders_status(arguments["order_ids"]))
+    if name == "wb_dbs_orders_client":
+        return _json(await c.dbs_orders_client(arguments["order_ids"]))
+    if name == "wb_dbs_orders_delivery_date":
+        return _json(await c.dbs_orders_delivery_date(arguments["order_ids"]))
+    if name == "wb_dbs_groups_info":
+        return _json(await c.dbs_groups_info(arguments["group_ids"]))
+    if name == "wb_dbs_order_action":
+        return _json(await c.dbs_order_action(arguments["order_id"], arguments["action"], code=arguments.get("code")))
+    if name == "wb_dbs_order_meta_get":
+        return _json(await c.dbs_order_meta_get(arguments["order_id"]))
+    if name == "wb_dbs_order_meta_set":
+        return _json(await c.dbs_order_meta_set(arguments["order_id"], arguments["meta_type"], arguments["value"]))
+    if name == "wb_dbs_order_meta_delete":
+        return _json(await c.dbs_order_meta_delete(arguments["order_id"], arguments["key"]))
+
+    # ── Click-collect: самовывоз ──────────────────────────
+    if name == "wb_cc_orders_new":
+        return _json(await c.cc_orders_new())
+    if name == "wb_cc_orders":
+        return _json(await c.cc_orders(arguments.get("limit", 100), arguments.get("next", 0),
+                                       arguments["date_from"], arguments["date_to"]))
+    if name == "wb_cc_orders_status":
+        return _json(await c.cc_orders_status(arguments["order_ids"]))
+    if name == "wb_cc_orders_client":
+        return _json(await c.cc_orders_client(arguments["order_ids"]))
+    if name == "wb_cc_order_identity":
+        return _json(await c.cc_order_identity(arguments["order_code"], arguments["passcode"]))
+    if name == "wb_cc_order_action":
+        return _json(await c.cc_order_action(arguments["order_id"], arguments["action"]))
+    if name == "wb_cc_order_meta_get":
+        return _json(await c.cc_order_meta_get(arguments["order_id"]))
+    if name == "wb_cc_order_meta_set":
+        return _json(await c.cc_order_meta_set(arguments["order_id"], arguments["meta_type"], arguments["value"]))
+    if name == "wb_cc_order_meta_delete":
+        return _json(await c.cc_order_meta_delete(arguments["order_id"], arguments["key"]))
+
+    # ── Аналитика: расширение ─────────────────────────────
+    if name == "wb_analytics_brand_share":
+        return _json(await c.analytics_brand_share(arguments["parent_id"], arguments["brand"],
+                                                   arguments["date_from"], arguments["date_to"]))
+    if name == "wb_analytics_brand_share_brands":
+        return _json(await c.analytics_brand_share_brands())
+    if name == "wb_analytics_brand_share_parents":
+        return _json(await c.analytics_brand_share_parents(arguments["brand"], arguments["date_from"],
+                                                           arguments["date_to"], locale=arguments.get("locale", "ru")))
+    if name == "wb_analytics_region_sale":
+        return _json(await c.analytics_region_sale(arguments["date_from"], arguments["date_to"]))
+    if name == "wb_analytics_goods_labeling":
+        return _json(await c.analytics_goods_labeling(arguments["date_from"], arguments["date_to"]))
+    if name == "wb_search_table_details":
+        return _json(await c.search_table_details(arguments["body"]))
+    if name == "wb_search_table_groups":
+        return _json(await c.search_table_groups(arguments["body"]))
+    if name == "wb_search_product_orders":
+        return _json(await c.search_product_orders(arguments["nm_id"], arguments["search_texts"],
+                                                   arguments["date_from"], arguments["date_to"]))
+
+    # ── Отзывы/вопросы: расширение ────────────────────────
+    if name == "wb_new_feedbacks_questions":
+        return _json(await c.new_feedbacks_questions())
+    if name == "wb_feedbacks_actions":
+        return _json(await c.feedbacks_actions(arguments["feedback_id"],
+                                               feedback_valuation=arguments.get("feedback_valuation"),
+                                               product_valuation=arguments.get("product_valuation")))
+    if name == "wb_question_get":
+        return _json(await c.question_get(arguments["question_id"]))
+    if name == "wb_feedback_order_return":
+        return _json(await c.feedback_order_return(arguments["feedback_id"]))
+    if name == "wb_feedbacks_count_period":
+        return _json(await c.feedbacks_count_period(date_from=arguments.get("date_from"),
+                                                    date_to=arguments.get("date_to"),
+                                                    is_answered=arguments.get("is_answered")))
+    if name == "wb_questions_count_period":
+        return _json(await c.questions_count_period(date_from=arguments.get("date_from"),
+                                                    date_to=arguments.get("date_to"),
+                                                    is_answered=arguments.get("is_answered")))
 
     # ── Тарифы ────────────────────────────────────────────
     if name == "wb_tariffs_box":

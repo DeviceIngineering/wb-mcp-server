@@ -15,6 +15,7 @@
   - Documents API   (documents-api.wildberries.ru) — акты, УПД, счета-фактуры
 """
 
+import asyncio
 import httpx
 from typing import Any
 from datetime import datetime, timedelta
@@ -70,30 +71,46 @@ class WBClient:
 
     # ─── Низкоуровневые хелперы ──────────────────────────────
 
+    # Статусы, при которых имеет смысл повторить запрос.
+    _RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+    async def _send(self, method: str, client: httpx.AsyncClient, path: str, *,
+                    params: dict | None = None, json_body: Any = None,
+                    max_retries: int = 4) -> Any:
+        """Единая точка отправки запросов с авто-throttle на 429/5xx.
+
+        WB лимитирует часть API (напр. календарь акций — 10 запросов / 6 сек).
+        При 429/5xx ждём Retry-After (или экспоненциальный backoff) и повторяем.
+        """
+        delay = 1.0
+        for attempt in range(max_retries + 1):
+            r = await client.request(method, path, params=params, json=json_body)
+            if r.status_code in self._RETRY_STATUSES and attempt < max_retries:
+                retry_after = r.headers.get("Retry-After", "")
+                try:
+                    wait = float(retry_after) if retry_after else delay
+                except ValueError:
+                    wait = delay
+                await asyncio.sleep(min(wait, 15.0))
+                delay = min(delay * 2, 15.0)
+                continue
+            r.raise_for_status()
+            return r.json() if r.content else {}
+
     async def _post(self, client: httpx.AsyncClient, path: str, body: dict | list | None = None) -> Any:
-        r = await client.post(path, json=body if body is not None else {})
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        return await self._send("POST", client, path, json_body=body if body is not None else {})
 
     async def _get(self, client: httpx.AsyncClient, path: str, params: dict | None = None) -> Any:
-        r = await client.get(path, params=params)
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        return await self._send("GET", client, path, params=params)
 
     async def _put(self, client: httpx.AsyncClient, path: str, body: dict | list | None = None) -> Any:
-        r = await client.put(path, json=body if body is not None else {})
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        return await self._send("PUT", client, path, json_body=body if body is not None else {})
 
     async def _patch(self, client: httpx.AsyncClient, path: str, body: dict | list | None = None) -> Any:
-        r = await client.patch(path, json=body if body is not None else {})
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        return await self._send("PATCH", client, path, json_body=body if body is not None else {})
 
     async def _delete(self, client: httpx.AsyncClient, path: str, params: dict | None = None) -> Any:
-        r = await client.delete(path, params=params)
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        return await self._send("DELETE", client, path, params=params)
 
     # ═══════════════════════════════════════════════════════════
     # CONTENT API — Карточки товаров
@@ -265,16 +282,46 @@ class WBClient:
     # ═══════════════════════════════════════════════════════════
 
     async def promotions_list(self, start: str, end: str, all_promo: bool = False,
-                              limit: int = 100, offset: int = 0) -> dict:
+                              limit: int = 1000, offset: int = 0,
+                              promo_type: str | None = None) -> dict:
         """GET /api/v1/calendar/promotions — список акций WB за период.
 
         start/end: RFC3339 (2026-06-01T00:00:00Z). all_promo=False — только доступные для участия.
+        promo_type: "auto" (автоакции — WB добавляет товары сам) | "regular" (обычные) | None (все).
+                    Фильтрация на стороне клиента по полю type ответа WB.
         """
-        return await self._get(self._calendar, "/api/v1/calendar/promotions", {
+        resp = await self._get(self._calendar, "/api/v1/calendar/promotions", {
             "startDateTime": start, "endDateTime": end,
             "allPromo": str(all_promo).lower(),
             "limitPromotion": limit, "offsetPromotion": offset,
         })
+        if promo_type in ("auto", "regular"):
+            promos = (resp.get("data") or {}).get("promotions") or resp.get("promotions") or []
+            filtered = [p for p in promos if p.get("type") == promo_type]
+            return {"promotions": filtered, "total": len(filtered), "filteredBy": promo_type}
+        return resp
+
+    @staticmethod
+    def _extract_promotions(resp: Any) -> list[dict]:
+        """Достать список акций из разных форматов ответа WB."""
+        if isinstance(resp, dict):
+            data = resp.get("data")
+            if isinstance(data, dict) and "promotions" in data:
+                return data["promotions"] or []
+            if "promotions" in resp:
+                return resp["promotions"] or []
+        return resp if isinstance(resp, list) else []
+
+    @staticmethod
+    def _extract_nomenclatures(resp: Any) -> list[dict]:
+        """Достать список товаров акции из разных форматов ответа WB."""
+        if isinstance(resp, dict):
+            data = resp.get("data")
+            if isinstance(data, dict) and "nomenclatures" in data:
+                return data["nomenclatures"] or []
+            if "nomenclatures" in resp:
+                return resp["nomenclatures"] or []
+        return resp if isinstance(resp, list) else []
 
     async def promotions_details(self, promotion_ids: list[int]) -> dict:
         """GET /api/v1/calendar/promotions/details — детали акций: даты, условия, бонусы за участие."""
@@ -283,10 +330,11 @@ class WBClient:
         })
 
     async def promotions_nomenclatures(self, promotion_id: int, in_action: bool | None = None,
-                                       limit: int = 100, offset: int = 0) -> dict:
+                                       limit: int = 1000, offset: int = 0) -> dict:
         """GET /api/v1/calendar/promotions/nomenclatures — товары, подходящие для акции.
 
         in_action: True — уже участвуют, False — не участвуют.
+        Ответ по товару: price/planPrice (цена сейчас → в акции), discount/planDiscount.
         """
         params: dict[str, Any] = {"promotionID": promotion_id, "limitNomenclature": limit, "offsetNomenclature": offset}
         if in_action is not None:
@@ -302,6 +350,91 @@ class WBClient:
         return await self._post(self._calendar, "/api/v1/calendar/promotions/upload", {
             "data": {"promotionID": promotion_id, "uploadNow": upload_now, "nomenclatures": nm_ids},
         })
+
+    # ── Композитные инструменты по акциям/автоакциям ──────────
+
+    async def promotions_auto(self, start: str, end: str, limit: int = 1000, offset: int = 0) -> dict:
+        """Только АВТОАКЦИИ (type=auto) за период — WB добавляет товары сам.
+
+        Критичный мониторинг: проверяй регулярно, чтобы цены не упали без твоего ведома.
+        """
+        resp = await self.promotions_list(start, end, all_promo=True, limit=limit, offset=offset)
+        autos = [p for p in self._extract_promotions(resp) if p.get("type") == "auto"]
+        return {"autoPromotions": autos, "total": len(autos), "period": {"start": start, "end": end}}
+
+    async def promotions_audit(self, start: str, end: str, only_auto: bool = False,
+                               max_promotions: int = 25) -> dict:
+        """Аудит участия: куда WB уже добавил мои товары и каков ценовой эффект.
+
+        Проходит по акциям периода (по умолчанию только автоакции), для каждой берёт
+        товары с inAction=true и считает падение цены (price→planPrice) и рост скидки.
+        Авто-throttle учитывает лимит календаря (10 запросов / 6 сек).
+
+        ВАЖНО: для АВТОАКЦИЙ (type=auto) WB не отдаёт состав товаров через API
+        (эндпоинт nomenclatures возвращает 422) — состав формирует сам WB.
+        Такие акции помечаются nomenclaturesAvailable=false; контроль цен — через
+        wb_prices_list / wb_prices_quarantine и уведомления в ЛК.
+        """
+        resp = await self.promotions_list(start, end, all_promo=True)
+        promos = self._extract_promotions(resp)
+        if only_auto:
+            promos = [p for p in promos if p.get("type") == "auto"]
+        promos = promos[:max_promotions]
+
+        result: list[dict] = []
+        total_products = 0
+        for p in promos:
+            pid = p.get("id") or p.get("promotionID")
+            if pid is None:
+                continue
+            await asyncio.sleep(0.7)  # держим лимит 10 req / 6 сек
+            entry = {
+                "promotionID": pid, "name": p.get("name"), "type": p.get("type"),
+                "startDateTime": p.get("startDateTime"), "endDateTime": p.get("endDateTime"),
+            }
+            try:
+                nom_resp = await self.promotions_nomenclatures(pid, in_action=True)
+            except httpx.HTTPStatusError as e:
+                code = e.response.status_code
+                entry.update({
+                    "nomenclaturesAvailable": False, "enrolledCount": None, "products": [],
+                    "note": ("Состав автоакции недоступен через API (WB формирует сам)"
+                             if code == 422 else f"Ошибка получения товаров: HTTP {code}"),
+                })
+                result.append(entry)
+                continue
+            items = self._extract_nomenclatures(nom_resp)
+            products = []
+            for it in items:
+                price = it.get("price") or 0
+                plan_price = it.get("planPrice") or 0
+                drop_pct = round((price - plan_price) / price * 100, 1) if price and plan_price else None
+                products.append({
+                    "nmID": it.get("id") or it.get("nmID"),
+                    "price": price, "planPrice": plan_price, "priceDropPct": drop_pct,
+                    "discount": it.get("discount"), "planDiscount": it.get("planDiscount"),
+                })
+            total_products += len(products)
+            entry.update({"nomenclaturesAvailable": True,
+                          "enrolledCount": len(products), "products": products})
+            result.append(entry)
+        return {
+            "period": {"start": start, "end": end},
+            "onlyAuto": only_auto,
+            "promotionsChecked": len(result),
+            "enrolledProductsTotal": total_products,
+            "promotions": result,
+        }
+
+    async def promotions_exit(self, data: list[dict]) -> dict:
+        """Выйти из акции = восстановить цену/скидку (отдельного эндпоинта у WB нет).
+
+        data: [{nmID, price, discount}, ...] — целевые (доакционные) значения.
+        Под капотом POST /api/v2/upload/task (как prices_set).
+        """
+        res = await self.prices_upload(data)
+        return {"note": "Выход из акции выполняется восстановлением цены/скидки через Prices API.",
+                "uploadResult": res}
 
     # ═══════════════════════════════════════════════════════════
     # MARKETPLACE API — Заказы, поставки, склады
@@ -346,9 +479,7 @@ class WBClient:
 
     async def _post_with_params(self, client: httpx.AsyncClient, path: str,
                                 params: dict, body: dict | list) -> Any:
-        r = await client.post(path, params=params, json=body)
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        return await self._send("POST", client, path, params=params, json_body=body)
 
     async def supplies_list(self, limit: int = 1000, next_param: int = 0) -> dict:
         """GET /api/v3/supplies — список поставок FBS."""
@@ -811,6 +942,16 @@ class WBClient:
         return await self._post(self._advert, "/adv/v0/normquery/set-minus",
                                 {"advert_id": advert_id, "nm_id": nm_id, "norm_queries": norm_queries})
 
+    # ── Доп. инструменты рекламы ─────────────────────────────
+
+    async def advert_payments(self, date_from: str, date_to: str) -> Any:
+        """GET /adv/v1/payments — история пополнений рекламного счёта за период (даты YYYY-MM-DD)."""
+        return await self._get(self._advert, "/adv/v1/payments", {"from": date_from, "to": date_to})
+
+    async def advert_rename(self, advert_id: int, name: str) -> Any:
+        """POST /adv/v0/rename — переименовать кампанию."""
+        return await self._post(self._advert, "/adv/v0/rename", {"advertId": advert_id, "name": name})
+
     # ═══════════════════════════════════════════════════════════
     # FEEDBACKS API — Отзывы
     # ═══════════════════════════════════════════════════════════
@@ -1051,6 +1192,333 @@ class WBClient:
         Возвращает ссылку на скачивание документа (PDF/XML).
         """
         return await self._get(self._documents, "/api/v1/documents/download", {"id": document_id})
+
+    # ═══════════════════════════════════════════════════════════
+    # CONTENT API — расширение (объединение карточек, медиафайл, категории)
+    # ═══════════════════════════════════════════════════════════
+
+    async def cards_move_nm(self, nm_ids: list[int], target_imt: int | None = None) -> dict:
+        """POST /content/v2/cards/moveNm — объединить/разъединить карточки (≤30 nmID).
+
+        target_imt задан → объединить в этот imtID; не задан → разъединить (новые imtID).
+        """
+        body: dict[str, Any] = {"nmIDs": nm_ids}
+        if target_imt is not None:
+            body["targetIMT"] = target_imt
+        return await self._post(self._content, "/content/v2/cards/moveNm", body)
+
+    async def card_add_nomenclature(self, imt_id: int, cards_to_add: list[dict]) -> dict:
+        """POST /content/v2/cards/upload/add — добавить номенклатуру/размер в существующую карточку (imtID)."""
+        return await self._post(self._content, "/content/v2/cards/upload/add",
+                                {"imtID": imt_id, "cardsToAdd": cards_to_add})
+
+    async def categories_parent(self, locale: str = "ru") -> dict:
+        """GET /content/v2/object/parent/all — все родительские категории товаров."""
+        return await self._get(self._content, "/content/v2/object/parent/all", {"locale": locale})
+
+    async def media_upload_file(self, nm_id: int, photo_number: int, file_url: str) -> dict:
+        """POST /content/v3/media/file — загрузить медиа ФАЙЛОМ (скачиваем по file_url и шлём multipart).
+
+        photo_number: позиция (с 1). Для видео = 1. Чтобы добавить фото — номер больше числа уже загруженных.
+        """
+        async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, read=120.0)) as dl:
+            resp = await dl.get(file_url)
+            resp.raise_for_status()
+            content = resp.content
+        headers = {"X-Nm-Id": str(nm_id), "X-Photo-Number": str(photo_number)}
+        r = await self._content.post("/content/v3/media/file", headers=headers,
+                                     files={"uploadfile": ("upload", content)})
+        r.raise_for_status()
+        return r.json() if r.content else {}
+
+    # ═══════════════════════════════════════════════════════════
+    # MARKETPLACE — маркировка заказов (КИЗ), пропуска, короба (trbx)
+    # ═══════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _meta_body(meta_type: str, value: Any) -> dict:
+        """Тело для установки метаданных заказа по типу."""
+        if meta_type == "sgtin":
+            return {"sgtins": value if isinstance(value, list) else [value]}
+        return {meta_type: value}  # uin | imei | gtin | expiration
+
+    async def order_meta_get(self, order_id: int) -> dict:
+        """GET /api/v3/orders/{id}/meta — метаданные/маркировка заказа FBS (доступные ключи из requiredMeta)."""
+        return await self._get(self._marketplace, f"/api/v3/orders/{order_id}/meta")
+
+    async def order_meta_set(self, order_id: int, meta_type: str, value: Any) -> dict:
+        """PUT /api/v3/orders/{id}/meta/{type} — задать маркировку: sgtin|uin|imei|gtin|expiration.
+
+        Только для заказа в статусе confirm. sgtin — список Data Matrix; uin=16, imei=15, gtin=13 символов;
+        expiration — дата dd.mm.yyyy (≥30 дней).
+        """
+        return await self._put(self._marketplace, f"/api/v3/orders/{order_id}/meta/{meta_type}",
+                               self._meta_body(meta_type, value))
+
+    async def order_meta_delete(self, order_id: int, key: str) -> Any:
+        """DELETE /api/v3/orders/{id}/meta?key= — удалить метаданные по ключу (imei|uin|gtin|sgtin)."""
+        return await self._delete(self._marketplace, f"/api/v3/orders/{order_id}/meta", {"key": key})
+
+    async def orders_status_history(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/orders/status/history — история статусов (трансграничные заказы, ≤100)."""
+        return await self._post(self._marketplace, "/api/v3/orders/status/history", {"orders": order_ids})
+
+    async def orders_client_info(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/orders/client — данные покупателя (трансграничные заказы из Турции)."""
+        return await self._post(self._marketplace, "/api/v3/orders/client", {"orders": order_ids})
+
+    async def supplies_reshipment(self) -> dict:
+        """GET /api/v3/supplies/orders/reshipment — заказы, требующие повторной отгрузки."""
+        return await self._get(self._marketplace, "/api/v3/supplies/orders/reshipment")
+
+    async def orders_external_stickers(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/files/orders/external-stickers — стикеры трансграничной доставки (≤100, статус complete)."""
+        return await self._post(self._marketplace, "/api/v3/files/orders/external-stickers", {"orders": order_ids})
+
+    # ── Пропуска на склад ─────────────────────────────────────
+    async def passes_offices(self) -> Any:
+        """GET /api/v3/passes/offices — офисы, требующие пропуск."""
+        return await self._get(self._marketplace, "/api/v3/passes/offices")
+
+    async def passes_list(self) -> Any:
+        """GET /api/v3/passes — список действующих пропусков."""
+        return await self._get(self._marketplace, "/api/v3/passes")
+
+    async def pass_create(self, first_name: str, last_name: str, car_model: str,
+                          car_number: str, office_id: int) -> dict:
+        """POST /api/v3/passes — создать пропуск (действует 48 ч)."""
+        return await self._post(self._marketplace, "/api/v3/passes", {
+            "firstName": first_name, "lastName": last_name,
+            "carModel": car_model, "carNumber": car_number, "officeId": office_id,
+        })
+
+    async def pass_update(self, pass_id: int, first_name: str, last_name: str, car_model: str,
+                          car_number: str, office_id: int) -> Any:
+        """PUT /api/v3/passes/{id} — обновить пропуск."""
+        return await self._put(self._marketplace, f"/api/v3/passes/{pass_id}", {
+            "firstName": first_name, "lastName": last_name,
+            "carModel": car_model, "carNumber": car_number, "officeId": office_id,
+        })
+
+    async def pass_delete(self, pass_id: int) -> Any:
+        """DELETE /api/v3/passes/{id} — удалить пропуск."""
+        return await self._delete(self._marketplace, f"/api/v3/passes/{pass_id}")
+
+    # ── Короба поставки FBS (trbx) ────────────────────────────
+    async def supply_trbx_list(self, supply_id: str) -> dict:
+        """GET /api/v3/supplies/{id}/trbx — короба поставки."""
+        return await self._get(self._marketplace, f"/api/v3/supplies/{supply_id}/trbx")
+
+    async def supply_trbx_add(self, supply_id: str, amount: int) -> dict:
+        """POST /api/v3/supplies/{id}/trbx — добавить короба (amount 1..1000, только для ПВЗ при сборке)."""
+        return await self._post(self._marketplace, f"/api/v3/supplies/{supply_id}/trbx", {"amount": amount})
+
+    async def supply_trbx_delete(self, supply_id: str, trbx_ids: list[str]) -> Any:
+        """DELETE /api/v3/supplies/{id}/trbx — удалить короба."""
+        return await self._send("DELETE", self._marketplace, f"/api/v3/supplies/{supply_id}/trbx",
+                                json_body={"trbxIds": trbx_ids})
+
+    async def supply_trbx_stickers(self, supply_id: str, trbx_ids: list[str], sticker_type: str = "png") -> dict:
+        """POST /api/v3/supplies/{id}/trbx/stickers?type= — QR-стикеры коробов (svg|zplv|zplh|png)."""
+        return await self._post_with_params(self._marketplace, f"/api/v3/supplies/{supply_id}/trbx/stickers",
+                                            params={"type": sticker_type}, body={"trbxIds": trbx_ids})
+
+    # ═══════════════════════════════════════════════════════════
+    # DBS — доставка силами продавца (marketplace-api)
+    # ═══════════════════════════════════════════════════════════
+
+    async def dbs_orders_new(self) -> dict:
+        """GET /api/v3/dbs/orders/new — новые DBS-заказы."""
+        return await self._get(self._marketplace, "/api/v3/dbs/orders/new")
+
+    async def dbs_orders(self, limit: int, next_val: int, date_from: int, date_to: int) -> dict:
+        """GET /api/v3/dbs/orders — завершённые DBS-заказы (Unix-таймстампы, ≤30 дней, курсор next)."""
+        return await self._get(self._marketplace, "/api/v3/dbs/orders", {
+            "limit": limit, "next": next_val, "dateFrom": date_from, "dateTo": date_to})
+
+    async def dbs_orders_status(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/dbs/orders/status — статусы DBS-заказов (≤1000)."""
+        return await self._post(self._marketplace, "/api/v3/dbs/orders/status", {"orders": order_ids})
+
+    async def dbs_orders_client(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/dbs/orders/client — данные покупателя (после confirm)."""
+        return await self._post(self._marketplace, "/api/v3/dbs/orders/client", {"orders": order_ids})
+
+    async def dbs_orders_delivery_date(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/dbs/orders/delivery-date — выбранные покупателем дата/время доставки (≤1000)."""
+        return await self._post(self._marketplace, "/api/v3/dbs/orders/delivery-date", {"orders": order_ids})
+
+    async def dbs_groups_info(self, group_ids: list[str]) -> Any:
+        """POST /api/v3/dbs/groups/info — стоимость платной доставки по groupId (≤1000)."""
+        return await self._post(self._marketplace, "/api/v3/dbs/groups/info", {"groups": group_ids})
+
+    async def dbs_order_action(self, order_id: int, action: str, code: str | None = None) -> Any:
+        """PATCH /api/v3/dbs/orders/{id}/{action} — confirm|deliver|receive|reject|cancel.
+
+        receive/reject требуют code (код подтверждения покупателя).
+        """
+        path = f"/api/v3/dbs/orders/{order_id}/{action}"
+        body = {"code": code} if action in ("receive", "reject") and code is not None else None
+        return await self._send("PATCH", self._marketplace, path, json_body=body)
+
+    async def dbs_order_meta_get(self, order_id: int) -> dict:
+        """GET /api/v3/dbs/orders/{id}/meta — метаданные DBS-заказа."""
+        return await self._get(self._marketplace, f"/api/v3/dbs/orders/{order_id}/meta")
+
+    async def dbs_order_meta_set(self, order_id: int, meta_type: str, value: Any) -> Any:
+        """PUT /api/v3/dbs/orders/{id}/meta/{type} — sgtin|uin|imei|gtin (статус confirm)."""
+        return await self._put(self._marketplace, f"/api/v3/dbs/orders/{order_id}/meta/{meta_type}",
+                               self._meta_body(meta_type, value))
+
+    async def dbs_order_meta_delete(self, order_id: int, key: str) -> Any:
+        """DELETE /api/v3/dbs/orders/{id}/meta?key= — удалить метаданные."""
+        return await self._delete(self._marketplace, f"/api/v3/dbs/orders/{order_id}/meta", {"key": key})
+
+    # ═══════════════════════════════════════════════════════════
+    # CLICK-COLLECT — самовывоз (marketplace-api)
+    # ═══════════════════════════════════════════════════════════
+
+    async def cc_orders_new(self) -> dict:
+        """GET /api/v3/click-collect/orders/new — новые задания самовывоза."""
+        return await self._get(self._marketplace, "/api/v3/click-collect/orders/new")
+
+    async def cc_orders(self, limit: int, next_val: int, date_from: int, date_to: int) -> dict:
+        """GET /api/v3/click-collect/orders — завершённые задания (Unix-таймстампы, ≤30 дней)."""
+        return await self._get(self._marketplace, "/api/v3/click-collect/orders", {
+            "limit": limit, "next": next_val, "dateFrom": date_from, "dateTo": date_to})
+
+    async def cc_orders_status(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/click-collect/orders/status — статусы заданий."""
+        return await self._post(self._marketplace, "/api/v3/click-collect/orders/status", {"orders": order_ids})
+
+    async def cc_orders_client(self, order_ids: list[int]) -> dict:
+        """POST /api/v3/click-collect/orders/client — данные покупателя (статусы confirm/prepare)."""
+        return await self._post(self._marketplace, "/api/v3/click-collect/orders/client", {"orders": order_ids})
+
+    async def cc_order_identity(self, order_code: str, passcode: str) -> dict:
+        """POST /api/v3/click-collect/orders/client/identity — проверка кода покупателя при выдаче."""
+        return await self._post(self._marketplace, "/api/v3/click-collect/orders/client/identity",
+                                {"orderCode": order_code, "passcode": passcode})
+
+    async def cc_order_action(self, order_id: int, action: str) -> Any:
+        """PATCH /api/v3/click-collect/orders/{id}/{action} — confirm|prepare|receive|reject|cancel."""
+        return await self._send("PATCH", self._marketplace,
+                                f"/api/v3/click-collect/orders/{order_id}/{action}", json_body=None)
+
+    async def cc_order_meta_get(self, order_id: int) -> dict:
+        """GET /api/v3/click-collect/orders/{id}/meta — метаданные задания."""
+        return await self._get(self._marketplace, f"/api/v3/click-collect/orders/{order_id}/meta")
+
+    async def cc_order_meta_set(self, order_id: int, meta_type: str, value: Any) -> Any:
+        """PUT /api/v3/click-collect/orders/{id}/meta/{type} — sgtin|uin|imei|gtin (статус confirm)."""
+        return await self._put(self._marketplace, f"/api/v3/click-collect/orders/{order_id}/meta/{meta_type}",
+                               self._meta_body(meta_type, value))
+
+    async def cc_order_meta_delete(self, order_id: int, key: str) -> Any:
+        """DELETE /api/v3/click-collect/orders/{id}/meta?key= — удалить метаданные."""
+        return await self._delete(self._marketplace, f"/api/v3/click-collect/orders/{order_id}/meta", {"key": key})
+
+    # ═══════════════════════════════════════════════════════════
+    # ANALYTICS — расширение (доля бренда, регионы, маркировка, поиск)
+    # ═══════════════════════════════════════════════════════════
+
+    async def analytics_brand_share(self, parent_id: int, brand: str, date_from: str, date_to: str) -> dict:
+        """GET /api/v1/analytics/brand-share — доля бренда в категории (≤365 дней, YYYY-MM-DD)."""
+        return await self._get(self._analytics, "/api/v1/analytics/brand-share", {
+            "parentId": parent_id, "brand": brand, "dateFrom": date_from, "dateTo": date_to})
+
+    async def analytics_brand_share_brands(self) -> dict:
+        """GET /api/v1/analytics/brand-share/brands — бренды продавца (продавались за 90 дней)."""
+        return await self._get(self._analytics, "/api/v1/analytics/brand-share/brands")
+
+    async def analytics_brand_share_parents(self, brand: str, date_from: str, date_to: str,
+                                            locale: str = "ru") -> dict:
+        """GET /api/v1/analytics/brand-share/parent-subjects — родительские категории бренда."""
+        return await self._get(self._analytics, "/api/v1/analytics/brand-share/parent-subjects", {
+            "brand": brand, "dateFrom": date_from, "dateTo": date_to, "locale": locale})
+
+    async def analytics_region_sale(self, date_from: str, date_to: str) -> dict:
+        """GET /api/v1/analytics/region-sale — продажи по регионам (≤31 дня, YYYY-MM-DD)."""
+        return await self._get(self._analytics, "/api/v1/analytics/region-sale", {
+            "dateFrom": date_from, "dateTo": date_to})
+
+    async def analytics_goods_labeling(self, date_from: str, date_to: str) -> dict:
+        """GET /api/v1/analytics/goods-labeling — удержания за отсутствие маркировки (≤31 дня, с фото)."""
+        return await self._get(self._analytics, "/api/v1/analytics/goods-labeling", {
+            "dateFrom": date_from, "dateTo": date_to})
+
+    async def search_table_details(self, body: dict) -> dict:
+        """POST /api/v2/search-report/table/details — поисковая аналитика по товарам (нужна подписка Джем).
+
+        body: {currentPeriod{start,end}, pastPeriod?, orderBy{field,mode}, positionCluster, limit, offset, ...}
+        """
+        return await self._post(self._analytics, "/api/v2/search-report/table/details", body)
+
+    async def search_table_groups(self, body: dict) -> dict:
+        """POST /api/v2/search-report/table/groups — поисковая аналитика по группам (нужна подписка Джем)."""
+        return await self._post(self._analytics, "/api/v2/search-report/table/groups", body)
+
+    async def search_product_orders(self, nm_id: int, search_texts: list[str],
+                                    date_from: str, date_to: str) -> dict:
+        """POST /api/v2/search-report/product/orders — заказы/позиции по запросам для товара (≤7 дней, Джем)."""
+        return await self._post(self._analytics, "/api/v2/search-report/product/orders", {
+            "period": {"start": date_from, "end": date_to}, "nmId": nm_id, "searchTexts": search_texts})
+
+    # ═══════════════════════════════════════════════════════════
+    # FEEDBACKS/QUESTIONS — расширение
+    # ═══════════════════════════════════════════════════════════
+
+    async def new_feedbacks_questions(self) -> dict:
+        """GET /api/v1/new-feedbacks-questions — флаги непросмотренных отзывов/вопросов."""
+        return await self._get(self._feedbacks, "/api/v1/new-feedbacks-questions")
+
+    async def feedbacks_actions(self, feedback_id: str, feedback_valuation: int | None = None,
+                                product_valuation: int | None = None) -> Any:
+        """POST /api/v1/feedbacks/actions — жалоба на отзыв / проблема с товаром (коды из supplier-valuations)."""
+        body: dict[str, Any] = {"id": feedback_id}
+        if feedback_valuation is not None:
+            body["supplierFeedbackValuation"] = feedback_valuation
+        if product_valuation is not None:
+            body["supplierProductValuation"] = product_valuation
+        return await self._post(self._feedbacks, "/api/v1/feedbacks/actions", body)
+
+    async def question_get(self, question_id: str) -> dict:
+        """GET /api/v1/question?id= — один вопрос покупателя по ID."""
+        return await self._get(self._feedbacks, "/api/v1/question", {"id": question_id})
+
+    async def feedback_order_return(self, feedback_id: str) -> dict:
+        """POST /api/v1/feedbacks/order/return — запрос возврата товара по отзыву (isAbleReturnProductOrders=true)."""
+        return await self._post(self._feedbacks, "/api/v1/feedbacks/order/return", {"feedbackId": feedback_id})
+
+    async def feedbacks_count_period(self, date_from: int | None = None, date_to: int | None = None,
+                                     is_answered: bool | None = None) -> dict:
+        """GET /api/v1/feedbacks/count — число отзывов за период (Unix ts, фильтр isAnswered)."""
+        params: dict[str, Any] = {}
+        if date_from is not None: params["dateFrom"] = date_from
+        if date_to is not None: params["dateTo"] = date_to
+        if is_answered is not None: params["isAnswered"] = str(is_answered).lower()
+        return await self._get(self._feedbacks, "/api/v1/feedbacks/count", params)
+
+    async def questions_count_period(self, date_from: int | None = None, date_to: int | None = None,
+                                     is_answered: bool | None = None) -> dict:
+        """GET /api/v1/questions/count — число вопросов за период (Unix ts, фильтр isAnswered)."""
+        params: dict[str, Any] = {}
+        if date_from is not None: params["dateFrom"] = date_from
+        if date_to is not None: params["dateTo"] = date_to
+        if is_answered is not None: params["isAnswered"] = str(is_answered).lower()
+        return await self._get(self._feedbacks, "/api/v1/questions/count", params)
+
+    # ═══════════════════════════════════════════════════════════
+    # ADVERT — расширение (предметы/товары для кампаний)
+    # ═══════════════════════════════════════════════════════════
+
+    async def advert_subjects(self) -> Any:
+        """GET /adv/v1/supplier/subjects — предметы, доступные для рекламных кампаний."""
+        return await self._get(self._advert, "/adv/v1/supplier/subjects")
+
+    async def advert_available_nms(self, subject_ids: list[int]) -> Any:
+        """POST /adv/v2/supplier/nms — товары (nm), доступные для кампаний, по ID предметов."""
+        return await self._post(self._advert, "/adv/v2/supplier/nms", subject_ids)
 
     # ═══════════════════════════════════════════════════════════
     # Закрытие

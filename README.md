@@ -1,7 +1,7 @@
-# WB MCP Server v2.0
+# WB MCP Server v2.1
 
 MCP-сервер для управления несколькими магазинами Wildberries через Claude / OpenClaw.
-100+ инструментов, мульти-магазин, веб-дашборд, встроенная диагностика WB API.
+166 инструментов, мульти-магазин, веб-дашборд, встроенная диагностика WB API.
 
 Эндпоинты приведены в соответствие с актуальной документацией dev.wildberries.ru
 (июнь 2026): новая рекламная модель (seacat/normquery), воронка продаж v3,
@@ -9,25 +9,28 @@ finance-api, календарь акций, поставки FBW.
 
 **Поддержка нескольких магазинов** — каждый вызов принимает `shop_id`, что позволяет работать с разными аккаунтами WB в одном диалоге.
 
-## 100+ инструментов
+## 166 инструментов
 
 | Категория | Инструменты | Приоритет |
 |-----------|------------|-----------|
 | Магазины | wb_list_shops | — |
 | Диагностика | wb_diagnostics, wb_token_info, wb_degradations, wb_api_news | P0 |
-| Карточки | wb_card_errors, wb_cards_list, wb_card_detail, wb_cards_create, wb_cards_update, wb_cards_trash, wb_cards_limits, wb_barcodes_generate, wb_media_upload, wb_subjects_search, wb_subject_charcs, wb_directory, wb_tags, wb_tag_link | P0-P2 |
+| Карточки | wb_card_errors, wb_cards_list, wb_card_detail, wb_cards_create, wb_cards_update, wb_cards_trash, wb_cards_limits, wb_barcodes_generate, wb_media_upload, wb_media_upload_file, wb_subjects_search, wb_subject_charcs, wb_categories_parent, wb_directory, wb_tags, wb_tag_link, wb_cards_move_nm, wb_card_add_nomenclature | P0-P2 |
 | Цены | wb_prices_list, wb_prices_set, wb_prices_quarantine, wb_prices_club_discount, wb_prices_upload_status, wb_prices_size_list | P0-P2 |
-| Акции | wb_promotions_list, wb_promotions_details, wb_promotions_products, wb_promotions_add_products | P0-P1 |
+| Акции и автоакции | wb_promotions_list (фильтр type=auto/regular), wb_promotions_auto (только автоакции), wb_promotions_audit (где WB уже добавил товары + ценовой эффект), wb_promotions_details, wb_promotions_products, wb_promotions_add_products, wb_promotion_exit | P0-P1 |
 | Финансы | wb_finance_report, wb_finance_balance, wb_seller_info | P0 |
-| Реклама | wb_advert_list, wb_advert_create, wb_advert_stats, wb_advert_balance, wb_advert_budget, wb_advert_deposit, wb_advert_costs, wb_advert_pause/start/stop/delete, wb_advert_bids_set, wb_advert_bids_recommendations, wb_advert_clusters, wb_advert_clusters_stats, wb_advert_cluster_bids, wb_advert_minus_phrases | P0-P2 |
+| Реклама | wb_advert_list, wb_advert_create, wb_advert_stats, wb_advert_balance, wb_advert_budget, wb_advert_deposit, wb_advert_costs, wb_advert_pause/start/stop/delete, wb_advert_bids_set, wb_advert_bids_recommendations, wb_advert_clusters, wb_advert_clusters_stats, wb_advert_cluster_bids, wb_advert_minus_phrases, wb_advert_payments, wb_advert_rename | P0-P2 |
 | Тарифы | wb_tariffs_box, wb_tariffs_pallet, wb_tariffs_return, wb_tariffs_commission, wb_acceptance_coefficients | P0 |
 | Хранение | wb_paid_storage, wb_warehouse_remains | P0-P1 |
-| Аналитика | wb_analytics_detail (воронка v3), wb_analytics_history, wb_analytics_stocks, wb_analytics_antifraud, wb_analytics_acceptance, wb_banned_products, wb_deductions, wb_search_report, wb_search_texts | P0-P1 |
-| Заказы FBS | wb_orders_new, wb_orders_list, wb_orders_status, wb_order_cancel, wb_orders_stickers, wb_supply_create/detail/add_orders/deliver/barcode/delete | P1-P2 |
+| Аналитика | wb_analytics_detail (воронка v3), wb_analytics_history, wb_analytics_stocks, wb_analytics_antifraud, wb_analytics_acceptance, wb_banned_products, wb_deductions, wb_search_report, wb_search_texts, wb_analytics_brand_share(+brands/parents), wb_analytics_region_sale, wb_analytics_goods_labeling, wb_search_table_details, wb_search_table_groups, wb_search_product_orders | P0-P1 |
+| Заказы FBS | wb_orders_new, wb_orders_list, wb_orders_status, wb_order_cancel, wb_orders_stickers, wb_supply_create/detail/add_orders/deliver/barcode/delete, wb_order_meta_get/set/delete (КИЗ), wb_passes_list/offices/create/update/delete, wb_supply_trbx_list/add/delete/stickers, wb_orders_status_history, wb_orders_client_info, wb_supplies_reshipment, wb_orders_external_stickers | P0-P2 |
+| Заказы DBS (доставка продавцом) | wb_dbs_orders_new, wb_dbs_orders, wb_dbs_orders_status, wb_dbs_orders_client, wb_dbs_orders_delivery_date, wb_dbs_groups_info, wb_dbs_order_action (confirm/deliver/receive/reject/cancel), wb_dbs_order_meta_get/set/delete | P0-P2 |
+| Самовывоз (click-collect) | wb_cc_orders_new, wb_cc_orders, wb_cc_orders_status, wb_cc_orders_client, wb_cc_order_identity, wb_cc_order_action (confirm/prepare/receive/reject/cancel), wb_cc_order_meta_get/set/delete | P0-P2 |
 | Поставки FBW | wb_fbw_supplies, wb_fbw_supply_detail, wb_fbw_supply_goods, wb_fbw_acceptance_options, wb_fbw_warehouses | P1-P2 |
 | Статистика | wb_stats_sales, wb_stats_orders, wb_stats_stocks | P0-P1 |
-| Отзывы | wb_feedbacks_list, wb_feedbacks_count, wb_feedback_reply, wb_seller_rating | P1 |
-| Вопросы | wb_questions_list, wb_questions_count, wb_question_reply | P1 |
+| Отзывы | wb_feedbacks_list, wb_feedbacks_count, wb_feedbacks_count_period, wb_feedback_reply, wb_seller_rating, wb_new_feedbacks_questions, wb_feedbacks_actions, wb_feedback_order_return | P1-P2 |
+| Вопросы | wb_questions_list, wb_questions_count, wb_questions_count_period, wb_question_reply, wb_question_get | P1-P2 |
+| Реклама (доп.) | wb_advert_subjects, wb_advert_available_nms | P2 |
 | Возвраты | wb_returns_list, wb_return_answer, wb_goods_return_report | P1 |
 | Склады | wb_warehouses, wb_supplies_list, wb_stocks_update, wb_stocks_get | P2 |
 | Чаты | wb_buyer_chats, wb_chat_events, wb_chat_send | P1 |
@@ -106,7 +109,7 @@ wb-mcp-server/
 ├── docker-compose.yml          # порт 8001
 ├── DEPLOY.md                   # деплой на отдельный Mac mini + OpenClaw
 └── wb_mcp/
-    ├── server.py       # MCP-сервер (100+ инструментов, мульти-магазин)
+    ├── server.py       # MCP-сервер (166 инструментов, мульти-магазин)
     ├── client.py       # HTTP-клиенты 14 API Wildberries
     ├── app.py          # FastAPI (SSE + веб-интерфейс + авторизация + health-loop)
     ├── diagnostics.py  # ping, JWT-декодер, пробы, новости API

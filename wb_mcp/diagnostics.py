@@ -162,6 +162,16 @@ def build_probes(client) -> list[tuple[str, str, Any]]:
         ("Документы", "GET /api/v1/documents/categories", lambda: client.documents_categories()),
         ("Финансы", "GET /api/v1/account/balance", lambda: client.finance_balance()),
         ("Поставки FBW", "GET /api/v1/warehouses", lambda: client.fbw_warehouses()),
+        # Расширенные эндпоинты — лёгкие GET без параметров. Ловят поломку/удаление
+        # путей (как было с adv config/keywords → 404). Только безопасные read-only.
+        ("Контент: категории", "GET /content/v2/object/parent/all", lambda: client.categories_parent()),
+        ("Реклама: предметы", "GET /adv/v1/supplier/subjects", lambda: client.advert_subjects()),
+        ("Отзывы: новые", "GET /api/v1/new-feedbacks-questions", lambda: client.new_feedbacks_questions()),
+        ("Аналитика: бренды", "GET /api/v1/analytics/brand-share/brands", lambda: client.analytics_brand_share_brands()),
+        ("FBS: пропуска", "GET /api/v3/passes", lambda: client.passes_list()),
+        ("FBS: reshipment", "GET /api/v3/supplies/orders/reshipment", lambda: client.supplies_reshipment()),
+        ("DBS: новые заказы", "GET /api/v3/dbs/orders/new", lambda: client.dbs_orders_new()),
+        ("Самовывоз: новые", "GET /api/v3/click-collect/orders/new", lambda: client.cc_orders_new()),
     ]
 
 
