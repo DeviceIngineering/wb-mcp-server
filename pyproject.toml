@@ -1,7 +1,7 @@
 [project]
 name = "wb-mcp-server"
-version = "2.0.0"
-description = "MCP-сервер для Wildberries Seller API (товары, цены, заказы, финансы, реклама, аналитика, акции, FBW, диагностика)"
+version = "2.2.0"
+description = "MCP-сервер для Wildberries Seller API (товары, цены, заказы, финансы, реклама, аналитика, акции, FBW, диагностика, отзывы-пины, Джем-аналитика, замеры, эквайринг)"
 requires-python = ">=3.10"
 dependencies = [
     "mcp[cli]>=1.0.0",
@@ -23,6 +23,9 @@ packages = ["wb_mcp"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [project.scripts]
 wb-mcp = "wb_mcp.server:main"

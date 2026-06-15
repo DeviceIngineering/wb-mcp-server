@@ -219,6 +219,34 @@ class WBClient:
         """GET /content/v2/object/charcs/{objectName} — характеристики для категории (для SEO)."""
         return await self._get(self._content, f"/content/v2/object/charcs/{object_name}")
 
+    async def tag_create(self, name: str, color: str = "#FF0000") -> dict:
+        """POST /content/v2/tag — создать ярлык (тег). color: HEX-цвет."""
+        return await self._post(self._content, "/content/v2/tag", {"name": name, "color": color})
+
+    async def tag_update(self, tag_id: int, name: str, color: str) -> dict:
+        """PATCH /content/v2/tag/{id} — обновить ярлык (название, цвет)."""
+        return await self._patch(self._content, f"/content/v2/tag/{tag_id}", {"name": name, "color": color})
+
+    async def tag_delete(self, tag_id: int) -> dict:
+        """DELETE /content/v2/tag/{id} — удалить ярлык. ВНИМАНИЕ: ошибка если тег привязан к товарам."""
+        return await self._delete(self._content, f"/content/v2/tag/{tag_id}")
+
+    async def card_recommendations_get(self, nm_id: int) -> dict:
+        """POST /api/content/v1/recommendations/list — рекомендованные товары к карточке."""
+        return await self._post(self._content, "/api/content/v1/recommendations/list", {"nmId": nm_id})
+
+    async def card_recommendations_set(self, nm_id: int, recommended_nm_ids: list[int]) -> dict:
+        """POST /api/content/v1/recommendations/set — установить рекомендованные товары к карточке (≤10 nmID)."""
+        return await self._post(self._content, "/api/content/v1/recommendations/set",
+                                {"nmId": nm_id, "recommendedNmIds": recommended_nm_ids})
+
+    async def brands_list(self, subject_id: int | None = None) -> dict:
+        """GET /api/content/v1/brands — список брендов продавца по ID предмета."""
+        params: dict[str, Any] = {}
+        if subject_id:
+            params["subjectId"] = subject_id
+        return await self._get(self._content, "/api/content/v1/brands", params)
+
     # ═══════════════════════════════════════════════════════════
     # PRICES API — Цены и скидки
     # ═══════════════════════════════════════════════════════════
@@ -276,6 +304,13 @@ class WBClient:
     async def prices_size_list(self, nm_id: int, limit: int = 100, offset: int = 0) -> dict:
         """GET /api/v2/list/goods/size/nm — размеры товара с ценами."""
         return await self._get(self._prices, "/api/v2/list/goods/size/nm", {"nmID": nm_id, "limit": limit, "offset": offset})
+
+    async def prices_b2b_set(self, data: list[dict]) -> dict:
+        """POST /api/discounts-prices/v1/upload/task/b2b/wholesale — оптовые B2B скидки.
+        Каждый элемент: {"nmID": 123, "wholesaleDiscount": 10}
+        """
+        return await self._post(self._prices, "/api/discounts-prices/v1/upload/task/b2b/wholesale",
+                                {"data": data})
 
     # ═══════════════════════════════════════════════════════════
     # PROMOTIONS — Календарь акций (dp-calendar-api)
@@ -542,6 +577,10 @@ class WBClient:
         """GET /api/v1/warehouses — список складов WB (для поставок FBW)."""
         return await self._get(self._supplies, "/api/v1/warehouses")
 
+    async def fbw_transit_tariffs(self) -> Any:
+        """GET /api/v1/transit-tariffs — транзитные направления (для поставок FBW в регионы)."""
+        return await self._get(self._supplies, "/api/v1/transit-tariffs")
+
     async def acceptance_coefficients(self, warehouse_ids: list[int] | None = None) -> Any:
         """GET /api/tariffs/v1/acceptance/coefficients (common-api) — коэффициенты приёмки складов на 14 дней.
 
@@ -567,6 +606,47 @@ class WBClient:
     async def stocks_get(self, warehouse_id: int, skus: list[str]) -> dict:
         """POST /api/v3/stocks/{warehouseId} — получить остатки на складе FBS."""
         return await self._post(self._marketplace, f"/api/v3/stocks/{warehouse_id}", {"skus": skus})
+
+    async def warehouse_create(self, name: str, address: str | None = None,
+                                work_time: str | None = None) -> dict:
+        """POST /api/v3/warehouses — создать склад продавца."""
+        body: dict[str, Any] = {"name": name}
+        if address:
+            body["address"] = address
+        if work_time:
+            body["workTime"] = work_time
+        return await self._post(self._marketplace, "/api/v3/warehouses", body)
+
+    async def warehouse_update(self, warehouse_id: int, name: str | None = None,
+                                address: str | None = None) -> dict:
+        """PUT /api/v3/warehouses/{warehouseId} — обновить склад продавца."""
+        body: dict[str, Any] = {}
+        if name:
+            body["name"] = name
+        if address:
+            body["address"] = address
+        return await self._put(self._marketplace, f"/api/v3/warehouses/{warehouse_id}", body)
+
+    async def warehouse_delete(self, warehouse_id: int) -> Any:
+        """DELETE /api/v3/warehouses/{warehouseId} — удалить склад продавца."""
+        return await self._delete(self._marketplace, f"/api/v3/warehouses/{warehouse_id}")
+
+    async def stocks_delete(self, warehouse_id: int, skus: list[str]) -> dict:
+        """DELETE /api/v3/stocks/{warehouseId} — удалить записи об остатках по SKU."""
+        return await self._send("DELETE", self._marketplace, f"/api/v3/stocks/{warehouse_id}",
+                                json_body={"skus": skus})
+
+    async def orders_archive(self, date_from: str, date_to: str | None = None,
+                              limit: int = 1000, next_param: int = 0) -> dict:
+        """GET /api/marketplace/v3/fbs/orders/archive — архивные FBS-заказы за период."""
+        params: dict[str, Any] = {"limit": limit, "next": next_param, "dateFrom": date_from}
+        if date_to:
+            params["dateTo"] = date_to
+        return await self._get(self._marketplace, "/api/marketplace/v3/fbs/orders/archive", params)
+
+    async def supply_order_ids(self, supply_id: str) -> dict:
+        """GET /api/marketplace/v3/supplies/{supplyId}/order/ids — ID заданий в поставке FBS."""
+        return await self._get(self._marketplace, f"/api/marketplace/v3/supplies/{supply_id}/order/ids")
 
     # ═══════════════════════════════════════════════════════════
     # STATISTICS API — Продажи, заказы, склады
@@ -630,6 +710,29 @@ class WBClient:
         Содержит ВСЕ: комиссии, логистику, хранение, штрафы, к оплате.
         """
         return await self._post(self._finance, "/api/finance/v1/sales-reports/detailed", {
+            "dateFrom": date_from, "dateTo": date_to, "limit": limit, "rrdId": rrd_id,
+        })
+
+    async def finance_sales_report_by_id(self, report_id: str,
+                                          limit: int = 100000, rrd_id: int = 0) -> dict:
+        """POST /api/finance/v1/sales-reports/detailed/{reportId} — детализация конкретного отчёта по ID."""
+        return await self._post(self._finance, f"/api/finance/v1/sales-reports/detailed/{report_id}", {
+            "limit": limit, "rrdId": rrd_id,
+        })
+
+    async def finance_acquiring_list(self, date_from: str, date_to: str,
+                                      period: str = "weekly",
+                                      limit: int = 100, offset: int = 0) -> dict:
+        """POST /api/finance/v1/acquiring/list — список отчётов по издержкам эквайринга."""
+        return await self._post(self._finance, "/api/finance/v1/acquiring/list", {
+            "dateFrom": date_from, "dateTo": date_to, "period": period,
+            "limit": limit, "offset": offset,
+        })
+
+    async def finance_acquiring_detailed(self, date_from: str, date_to: str,
+                                          limit: int = 100000, rrd_id: int = 0) -> dict:
+        """POST /api/finance/v1/acquiring/detailed — детализация издержек эквайринга за период."""
+        return await self._post(self._finance, "/api/finance/v1/acquiring/detailed", {
             "dateFrom": date_from, "dateTo": date_to, "limit": limit, "rrdId": rrd_id,
         })
 
@@ -802,6 +905,89 @@ class WBClient:
             "orderBy": {"field": "avgPosition", "mode": "asc"},
             "limit": limit,
         })
+
+    async def analytics_item_rating(self, nm_ids: list[int]) -> dict:
+        """POST /api/analytics/v1/item/rating — рейтинг товаров: просмотры, добавления в корзину, заказы.
+        [Джем] КРИТИЧНО: низкий рейтинг = проблема карточки или конкурент обошёл. Лимит ≤1000 nmID.
+        """
+        if len(nm_ids) > 1000:
+            nm_ids = nm_ids[:1000]
+        return await self._post(self._analytics, "/api/analytics/v1/item/rating", {"nmIds": nm_ids})
+
+    async def analytics_measurement_penalties(self, date_from: str, date_to: str) -> dict:
+        """GET /api/analytics/v1/measurement/penalties — удержания за несоответствие фактических габаритов.
+        [Джем] КРИТИЧНО: прямые денежные удержания из выручки. YYYY-MM-DD.
+        """
+        return await self._get(self._analytics, "/api/analytics/v1/measurement/penalties",
+                               {"dateFrom": date_from, "dateTo": date_to})
+
+    async def analytics_warehouse_measurements(self, nm_ids: list[int] | None = None) -> dict:
+        """GET /api/analytics/v1/warehouse/measurements — результаты замеров товаров на складе WB.
+        Показывает как WB измерил товар — основа для удержаний за несоответствие.
+        """
+        params: dict[str, Any] = {}
+        if nm_ids:
+            params["nmIds"] = ",".join(str(x) for x in nm_ids)
+        return await self._get(self._analytics, "/api/analytics/v1/warehouse/measurements", params)
+
+    async def analytics_sales_funnel_grouped_history(
+        self, nm_ids: list[int], date_from: str, date_to: str,
+        aggregation_level: str = "day",
+    ) -> dict:
+        """POST /api/analytics/v3/sales-funnel/grouped/history — воронка продаж по группам/дням."""
+        return await self._post(self._analytics, "/api/analytics/v3/sales-funnel/grouped/history", {
+            "selectedPeriod": {"start": date_from, "end": date_to},
+            "nmIds": nm_ids,
+            "aggregationLevel": aggregation_level,
+        })
+
+    async def nm_report(self, nm_ids: list[int] | None = None,
+                        date_from: str | None = None, date_to: str | None = None) -> Any:
+        """POST /api/v2/nm-report/downloads — создать и скачать отчёт по номенклатуре (task-based).
+        Содержит: выручка, заказы, возвраты, среднее в корзине, конверсии по каждому nmID.
+        Ждёт готовности (до 3 минут). Отчёт хранится 3 дня.
+        """
+        body: dict[str, Any] = {}
+        if nm_ids:
+            body["nmIds"] = nm_ids
+        if date_from and date_to:
+            body["period"] = {"start": date_from, "end": date_to}
+        # Создаём задание
+        created = await self._post(self._analytics, "/api/v2/nm-report/downloads", body)
+        report_id = (created.get("data") or {}).get("id") or created.get("id")
+        if not report_id:
+            return created
+        # Ждём готовности
+        import asyncio as _aio
+        for _ in range(36):  # до 3 минут
+            await _aio.sleep(5)
+            reports = await self._get(self._analytics, "/api/v2/nm-report/downloads")
+            items = (reports.get("data") or {}).get("reports") or reports.get("reports") or []
+            found = next((r for r in items if r.get("id") == report_id), None)
+            if found:
+                status = found.get("status")
+                if status == "done":
+                    dl = await self._get(self._analytics, f"/api/v2/nm-report/downloads/file/{report_id}")
+                    return dl
+                if status in ("error", "canceled"):
+                    return {"report_id": report_id, "status": status}
+        return {"report_id": report_id, "status": "timeout",
+                "hint": "Отчёт ещё готовится. Вызови позже."}
+
+    async def stocks_report_sizes(self, nm_ids: list[int] | None = None,
+                                   date_from: str | None = None, date_to: str | None = None,
+                                   limit: int = 100, offset: int = 0) -> dict:
+        """POST /api/v2/stocks-report/products/sizes — отчёт об остатках и оборачиваемости по размерам."""
+        body: dict[str, Any] = {
+            "skipDeletedNm": True,
+            "orderBy": {"field": "avgOrders", "mode": "desc"},
+            "limit": limit, "offset": offset,
+        }
+        if nm_ids:
+            body["nmIDs"] = nm_ids
+        if date_from and date_to:
+            body["currentPeriod"] = {"start": date_from, "end": date_to}
+        return await self._post(self._analytics, "/api/v2/stocks-report/products/sizes", body)
 
     # ═══════════════════════════════════════════════════════════
     # ADVERT API — Рекламные кампании
@@ -990,6 +1176,23 @@ class WBClient:
             params["nmId"] = nm_id
         return await self._get(self._feedbacks, "/api/v1/feedbacks/archive", params)
 
+    async def feedbacks_pins_list(self) -> dict:
+        """GET /api/feedbacks/v1/pins — закреплённые отзывы (до 3 на nmID)."""
+        return await self._get(self._feedbacks, "/api/feedbacks/v1/pins")
+
+    async def feedbacks_pins_count(self) -> dict:
+        """GET /api/feedbacks/v1/pins/count — количество закреплённых отзывов."""
+        return await self._get(self._feedbacks, "/api/feedbacks/v1/pins/count")
+
+    async def feedbacks_pins_set(self, feedback_ids: list[str]) -> dict:
+        """POST /api/feedbacks/v1/pins — закрепить отзывы (≤3 на nmID). Требует Джем."""
+        return await self._post(self._feedbacks, "/api/feedbacks/v1/pins", {"feedbackIds": feedback_ids})
+
+    async def feedbacks_pins_delete(self, feedback_ids: list[str]) -> dict:
+        """DELETE /api/feedbacks/v1/pins — открепить отзывы."""
+        return await self._send("DELETE", self._feedbacks, "/api/feedbacks/v1/pins",
+                                json_body={"feedbackIds": feedback_ids})
+
     # ═══════════════════════════════════════════════════════════
     # QUESTIONS API — Вопросы покупателей
     # ═══════════════════════════════════════════════════════════
@@ -1127,6 +1330,23 @@ class WBClient:
             raise
 
     # ═══════════════════════════════════════════════════════════
+    # USERS API — Управление пользователями (common-api)
+    # ═══════════════════════════════════════════════════════════
+
+    async def users_list(self) -> dict:
+        """GET /api/v1/users (common-api) — список пользователей/сотрудников продавца."""
+        return await self._get(self._tariffs, "/api/v1/users")
+
+    async def users_invite(self, email: str, role: str | None = None) -> dict:
+        """POST /api/v1/invite (common-api) — создать приглашение пользователя.
+        role: admin | manager | analyst (зависит от прав токена).
+        """
+        body: dict[str, Any] = {"email": email}
+        if role:
+            body["role"] = role
+        return await self._post(self._tariffs, "/api/v1/invite", body)
+
+    # ═══════════════════════════════════════════════════════════
     # BUYER COMMUNICATION — Обращения и чаты
     # ═══════════════════════════════════════════════════════════
 
@@ -1156,6 +1376,10 @@ class WBClient:
         )
         r.raise_for_status()
         return r.json() if r.content else {}
+
+    async def buyer_chat_download(self, file_id: str) -> dict:
+        """GET /api/v1/seller/download/{id} — получить файл из чата покупателя."""
+        return await self._get(self._buyer_chat, f"/api/v1/seller/download/{file_id}")
 
     # ═══════════════════════════════════════════════════════════
     # DOCUMENTS API — Акты, УПД, счета-фактуры
@@ -1192,6 +1416,11 @@ class WBClient:
         Возвращает ссылку на скачивание документа (PDF/XML).
         """
         return await self._get(self._documents, "/api/v1/documents/download", {"id": document_id})
+
+    async def documents_download_bulk(self, document_ids: list[str]) -> dict:
+        """POST /api/v1/documents/download/all — скачать несколько документов одним запросом."""
+        return await self._post(self._documents, "/api/v1/documents/download/all",
+                                {"ids": document_ids})
 
     # ═══════════════════════════════════════════════════════════
     # CONTENT API — расширение (объединение карточек, медиафайл, категории)
