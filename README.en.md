@@ -163,10 +163,13 @@ and variants with and without an auth token.
 
 Overview and compatibility table: [docs/README.md](docs/README.md).
 
-The shortest possible setup, Claude Code:
+Where a client has a command that configures the connection by itself, the guide starts with
+that command and treats editing JSON as the second option. The shortest setup of all —
+Claude Code:
 
 ```bash
 claude mcp add --transport sse wildberries http://localhost:8001/sse
+claude mcp list      # expected: wildberries ... ✔ Connected
 ```
 
 ## Multi-store and security

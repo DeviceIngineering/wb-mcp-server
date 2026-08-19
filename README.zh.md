@@ -156,10 +156,12 @@ DATA_DIR=./data PORT=8001 python -m wb_mcp.app
 
 总览与兼容性表格见 [docs/README.md](docs/README.md)。
 
-最简单的一种，Claude Code：
+如果某个客户端自带能自动完成配置的命令，说明文档就从这条命令开始，
+手工改 JSON 作为第二种方式。其中最简单的是 Claude Code：
 
 ```bash
 claude mcp add --transport sse wildberries http://localhost:8001/sse
+claude mcp list      # 预期输出：wildberries ... ✔ Connected
 ```
 
 ## 多店铺与安全

@@ -18,7 +18,19 @@
 
 Формат — TOML, не JSON.
 
-## Конфигурация
+## Способ 1: одной командой
+
+У Codex есть команда добавления сервера. Её документированный синтаксис —
+`codex mcp add [OPTIONS] <NAME> (--url <URL> | -- <COMMAND>...)`: всё после `--`
+считается командой запуска stdio-сервера.
+
+```bash
+codex mcp add wildberries -- npx -y mcp-remote http://localhost:8001/sse --transport sse-only --allow-http
+```
+
+`--url` здесь не подходит: он предназначен для Streamable HTTP, которого у нас нет.
+
+## Способ 2: правка `config.toml`
 
 Без авторизации:
 

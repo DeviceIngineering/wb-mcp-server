@@ -24,6 +24,21 @@ curl -sN --max-time 3 http://localhost:8001/sse | head -2
 
 Если `auth_enabled: true`, а токен не передан, `GET /sse` вернёт `401 Unauthorized`.
 
+## Сначала команда, потом файл
+
+Если у клиента есть команда, которая настраивает подключение сама, в инструкции она идёт
+первой, а правка JSON — вторым способом. Одну строку в терминале доводят до конца чаще,
+чем поиск файла конфигурации на трёх операционных системах.
+
+| Клиент | Команда |
+|---|---|
+| Claude Code | `claude mcp add --transport sse wildberries http://localhost:8001/sse` |
+| Gemini CLI | `gemini mcp add --transport sse wildberries http://localhost:8001/sse` |
+| Codex CLI | `codex mcp add wildberries -- npx -y mcp-remote http://localhost:8001/sse --transport sse-only --allow-http` |
+| VS Code | палитра команд → `MCP: Add Server` |
+| Cursor, Cline, Windsurf, Zed, JetBrains | форма добавления сервера в интерфейсе |
+| Continue.dev, Claude Desktop | только файл конфигурации |
+
 ## Совместимость
 
 | Клиент | Как подключается | Заголовок `Authorization` | Инструкция |
