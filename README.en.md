@@ -14,8 +14,9 @@ other MCP client. Built for WB sellers (Wildberries is Russia's largest marketpl
 who run one or several seller accounts and would rather ask a question than click
 through the seller portal.
 
-> This is the author's own working tool. It is used every day and updated as the author
-> needs it — see [Updates and support](#updates-and-support).
+The server has been in daily use for more than five months across roughly twenty WB seller
+accounts, with 202 tools. It is the author's own working tool and is updated as the author
+needs it — [details here](#updates-and-support).
 
 ```
 You: Which of my product cards are blocked, and why?
@@ -175,6 +176,32 @@ claude mcp add --transport sse wildberries http://localhost:8001/sse
 parameter (the exceptions are `wb_list_shops` and `wb_degradations`).
 With a single store the parameter can be omitted — the server substitutes the only one available.
 
+The point is not "it supports two accounts" but that **a strategy is written once and rolled
+out to every account**: a pricing rule, a review-reply template, an advertising bid ceiling
+apply to all stores inside one conversation — no account switching, no scattering API keys
+across different clients' configs.
+
+**How many accounts you can connect.** There is no limit in the code: `shops.json` is a plain
+dictionary, add as many as you like. The ceiling is set by Wildberries, not by this server:
+all accounts reach WB **from a single IP address** — the one running this server — and rate
+limits are counted per address as well. The author's own estimate: around twenty accounts per
+address stay in the safe zone. Beyond that, split them across several servers with different
+addresses.
+
+Why this matters more than it looks — see the [WB limits](#wildberries-api-limits):
+several methods allow **3 requests per minute**, and **any 4XX response counts as 10 requests**.
+With a dozen accounts on one server, a handful of malformed requests in a row burns the quota
+ten times faster — and **every store hits the wall at once**, not just the one that erred.
+
+There are ways to watch for it:
+
+- **Background diagnostics** send one `/ping` per host per run (the limit is 3 requests per
+  30 seconds per host) and record failed checks and warnings into a history. You see the limit
+  approaching in advance, instead of learning about it from a block.
+- **The degradation detector** tells two cases apart: many tools degrading at once means
+  per-address throttling, while a single tool degrading means one WB endpoint broke.
+  The dashboard makes the difference obvious at a glance.
+
 **Where the tokens live.** In the `wb_data` volume (`/data` inside the container):
 
 - `shops.json` — stores, with tokens encrypted using Fernet;
@@ -202,6 +229,77 @@ docker compose up -d
   the token: the check runs only on `GET /sse`. Keep port 8001 inside a trusted network.
 - Port 8001 is not meant to be exposed to the internet. For remote access use Tailscale or a VPN.
 - The server does not terminate HTTPS. If you need TLS from outside, put a reverse proxy in front.
+
+## The web UI: every call is visible
+
+With a typical MCP server, calls vanish into thin air: you cannot see what the assistant
+actually did, how long it took or what the marketplace answered, and you learn about a problem
+only when something fails. Here every call has a record and every store has a state.
+For a tool that moves real money in a real shop, this is a precondition for trust,
+not decoration. Five months of daily use across some twenty accounts is precisely what
+filled these pages — and produced the WB limits section further down.
+
+### Dashboard — `/`
+
+A summary of all tool calls (`stats.get_summary()`):
+
+- total calls, calls today, number of errors, average call duration;
+- **top 10 tools**: call count, average time, error count;
+- **a feed of the last 50 calls**: timestamp, store, tool, duration in milliseconds,
+  success or failure, error text;
+- **a per-store filter** — an "All / specific account" switch above the summary.
+
+### Stores — `/shops`
+
+Accounts are added and removed right in the browser, with no file editing and no container
+restart. Each store has a **Проверить** ("Test") button: it makes one cheap real request to WB
+and tells you immediately whether the token is alive — instead of letting you find out during
+the first real call. Tokens are shown masked in the list (`abc***xyz`).
+
+Tokens are encrypted with Fernet and stored in `shops.json` inside the data volume; the key
+is in `.encryption_key` next to it. The HTTP client pool is reset when a store is saved or
+deleted, so a new token takes effect immediately.
+
+### Diagnostics — `/diagnostics`
+
+A background check every `HEALTH_CHECK_INTERVAL_MIN` minutes (30 by default), per store:
+
+- **the token** — expiry, access categories, read-only and sandbox flags;
+- **pings of 13 WB API hosts** — availability and latency of each;
+- **20 probes** — one cheap real GET per API category. These are what catch
+  "the endpoint returns 404 because WB renamed it";
+- **warnings in plain language**: "the token expires in N days",
+  "Content: 404 on /content/v2/... — WB may have changed the API";
+- **check history** with automatic rotation (the last 1000 records are kept);
+- a **"check now"** button to run everything immediately.
+
+### The degradation detector
+
+The most useful thing the accumulated statistics give you. The server finds, by itself, tools
+that **used to work and now fail consistently**: the last three calls failed while successful
+calls exist in the history. For each such tool it shows the time of the last successful call,
+the number of consecutive errors, the text of the latest error and the moment things broke.
+
+In other words, the server detects from its own statistics that Wildberries broke or switched
+off an endpoint — and tells you before you run into it at work. Next to the
+[section on limits and endpoint shutdown dates](#wildberries-api-limits) this is its practical
+continuation: that section lists what WB announced, this one catches what WB did quietly.
+
+You can look at it on the dashboard, or call `wb_degradations` straight from the chat.
+
+### JSON for external monitoring
+
+Everything visible to a human is also readable by a machine:
+
+| Endpoint | What it returns |
+|---|---|
+| `GET /api/health` | service status, whether authorization is on, the check interval, the last 5 health checks, the list of degraded tools |
+| `GET /api/stats` | the same summary as the dashboard; accepts `?shop=<shop_id>` |
+| `POST /api/diagnostics/run` | run diagnostics for all stores now and return the result |
+| `GET /api/diagnostics/<shop_id>` | full live diagnostics of a single store |
+
+So the server can be wired into Uptime Kuma, Zabbix or any other monitoring system, and you
+learn about a dead token before the assistant tells you about it.
 
 ## How it works
 
@@ -278,7 +376,9 @@ Environment variables:
 ## Wildberries API limits
 
 These are limits of WB itself, not of this server — but the assistant will hit them
-regularly, and it is better to know them in advance.
+regularly, and it is better to know them in advance. This list was not copied out of the
+documentation: it comes from five months of daily calls across some twenty accounts, plus
+the diagnostics log.
 
 - `GET /adv/v3/fullstats` (advertising statistics) — **3 requests per minute**, period
   no longer than 31 days.
@@ -357,9 +457,10 @@ see **[DEPLOY.md](DEPLOY.md)** (in Russian).
 
 Wildberries changes its API constantly: endpoints are added, renamed and switched off —
 the limits section above lists what has already been caught in practice.
-This server is the author's working tool, and it is updated **as the author needs it**:
-when the next change breaks something in his own stores. There is no schedule and no
-commitment on timing.
+This server is the author's working tool: more than five months of daily use across roughly
+twenty seller accounts. It is updated **as the author needs it** — when the next change breaks
+something in his own stores, not on a schedule. That is why the gaps between commits can be
+long: it means WB broke nothing in the meantime. There is no commitment on timing.
 
 If you need a fix urgently, write to **d0371153@gmail.com**.
 Issues and pull requests are welcome and do get reviewed.
