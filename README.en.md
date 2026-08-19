@@ -14,6 +14,8 @@ other MCP client. Built for WB sellers (Wildberries is Russia's largest marketpl
 who run one or several seller accounts and would rather ask a question than click
 through the seller portal.
 
+Selling on Ozon too? There is [the same server for Ozon](https://github.com/DeviceIngineering/ozon-mcp-server).
+
 The server has been in daily use for more than five months across roughly twenty WB seller
 accounts, with 202 tools. It is the author's own working tool and is updated as the author
 needs it — [details here](#updates-and-support).
@@ -460,6 +462,28 @@ wb-mcp-server/
 
 Moving the server to a dedicated machine, migrating stores, setting up autostart —
 see **[DEPLOY.md](DEPLOY.md)** (in Russian).
+
+## The same server for Ozon
+
+[**DeviceIngineering/ozon-mcp-server**](https://github.com/DeviceIngineering/ozon-mcp-server)
+is the same tool for the other marketplace (Ozon is Russia's other large marketplace):
+same architecture, same web UI with dashboard and diagnostics, same multi-store handling via
+`shop_id`, same SSE transport, same ways of connecting clients. Once you have set up one,
+the second one follows the same instructions; only the port and the tool set differ.
+
+|  | WB MCP Server | Ozon MCP Server |
+|---|---|---|
+| Port | 8001 | 8000 |
+| Tools | 202 | 151 |
+| API | Wildberries Seller API | Ozon Seller API + Performance API (advertising) |
+
+**They can run side by side on one machine**: different ports, different Docker volumes,
+no conflict.
+
+Living on the same server does not hurt on the rate-limit side either: both go out through
+one IP, but Wildberries and Ozon count their limits separately — they are different
+platforms. The per-address ceiling on the number of accounts, described in the multi-store
+section, applies within each platform on its own.
 
 ## Updates and support
 

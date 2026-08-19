@@ -13,6 +13,8 @@
 面向在 Wildberries（俄罗斯最大的电商平台）经营一个或多个卖家账号、
 不愿在卖家后台里反复点击的商家。
 
+同时也在 Ozon 上经营？还有[同一套的 Ozon 版服务器](https://github.com/DeviceIngineering/ozon-mcp-server)。
+
 这套服务器已在约二十个 WB 卖家账号上日常使用五个多月，共 202 个工具。
 它是作者本人的工作工具，按作者自身的需要更新——[具体说明](#更新与支持)。
 
@@ -431,6 +433,26 @@ wb-mcp-server/
 
 把服务器迁到独立机器、迁移店铺数据、配置开机自启——
 见 **[DEPLOY.md](DEPLOY.md)**（俄文）。
+
+## Ozon 版的同款服务器
+
+[**DeviceIngineering/ozon-mcp-server**](https://github.com/DeviceIngineering/ozon-mcp-server)
+是面向另一个平台的同一套工具（Ozon 是俄罗斯另一家大型电商平台）：
+架构相同，同样带控制台和自诊断的 Web 界面，同样通过 `shop_id` 支持多店铺，
+同样使用 SSE 传输，接入各客户端的方式也一样。
+搞定了其中一个，另一个照着同样的说明就能跑起来；区别只在端口和工具集。
+
+|  | WB MCP Server | Ozon MCP Server |
+|---|---|---|
+| 端口 | 8001 | 8000 |
+| 工具数 | 202 | 151 |
+| API | Wildberries Seller API | Ozon Seller API + Performance API（广告） |
+
+**两者可以同时装在同一台机器上**：端口不同，数据在不同的 Docker 卷里，不会冲突。
+
+放在同一台服务器上，在限流方面也互不影响：两者对外确实走同一个 IP，
+但 Wildberries 和 Ozon 各自统计各自的配额——它们是两个不同的平台。
+多店铺一节里讲的"每个地址能挂多少个账号"，是在每个平台内部各算各的。
 
 ## 更新与支持
 
