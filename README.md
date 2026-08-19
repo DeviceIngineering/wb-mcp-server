@@ -1,124 +1,290 @@
-# WB MCP Server v2.1
+[English](README.en.md) · [中文](README.zh.md)
 
-MCP-сервер для управления несколькими магазинами Wildberries через Claude / OpenClaw.
-166 инструментов, мульти-магазин, веб-дашборд, встроенная диагностика WB API.
+# WB MCP Server
 
-Эндпоинты приведены в соответствие с актуальной документацией dev.wildberries.ru
-(июнь 2026): новая рекламная модель (seacat/normquery), воронка продаж v3,
-finance-api, календарь акций, поставки FBW.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![MCP tools](https://img.shields.io/badge/MCP%20tools-202-orange.svg)](docs/tools.md)
+[![Transport](https://img.shields.io/badge/transport-SSE-lightgrey.svg)](#как-это-устроено)
 
-**Поддержка нескольких магазинов** — каждый вызов принимает `shop_id`, что позволяет работать с разными аккаунтами WB в одном диалоге.
+**Управляйте магазинами Wildberries из чата с ИИ-ассистентом.**
+202 инструмента Seller API — карточки, цены, реклама, поставки, отзывы, финансы, аналитика —
+доступны Claude, Cursor, Copilot, Gemini CLI и любому другому MCP-клиенту.
+Для продавцов WB, у которых один или несколько кабинетов и нет желания кликать в личном
+кабинете то, что можно спросить словами.
 
-## 166 инструментов
+> Это личный рабочий инструмент автора: им пользуются каждый день, и обновляется он
+> по мере собственной необходимости. Как это устроено — [«Обновления и поддержка»](#обновления-и-поддержка).
 
-| Категория | Инструменты | Приоритет |
-|-----------|------------|-----------|
-| Магазины | wb_list_shops | — |
-| Диагностика | wb_diagnostics, wb_token_info, wb_degradations, wb_api_news | P0 |
-| Карточки | wb_card_errors, wb_cards_list, wb_card_detail, wb_cards_create, wb_cards_update, wb_cards_trash, wb_cards_limits, wb_barcodes_generate, wb_media_upload, wb_media_upload_file, wb_subjects_search, wb_subject_charcs, wb_categories_parent, wb_directory, wb_tags, wb_tag_link, wb_cards_move_nm, wb_card_add_nomenclature | P0-P2 |
-| Цены | wb_prices_list, wb_prices_set, wb_prices_quarantine, wb_prices_club_discount, wb_prices_upload_status, wb_prices_size_list | P0-P2 |
-| Акции и автоакции | wb_promotions_list (фильтр type=auto/regular), wb_promotions_auto (только автоакции), wb_promotions_audit (где WB уже добавил товары + ценовой эффект), wb_promotions_details, wb_promotions_products, wb_promotions_add_products, wb_promotion_exit | P0-P1 |
-| Финансы | wb_finance_report, wb_finance_balance, wb_seller_info | P0 |
-| Реклама | wb_advert_list, wb_advert_create, wb_advert_stats, wb_advert_balance, wb_advert_budget, wb_advert_deposit, wb_advert_costs, wb_advert_pause/start/stop/delete, wb_advert_bids_set, wb_advert_bids_recommendations, wb_advert_clusters, wb_advert_clusters_stats, wb_advert_cluster_bids, wb_advert_minus_phrases, wb_advert_payments, wb_advert_rename | P0-P2 |
-| Тарифы | wb_tariffs_box, wb_tariffs_pallet, wb_tariffs_return, wb_tariffs_commission, wb_acceptance_coefficients | P0 |
-| Хранение | wb_paid_storage, wb_warehouse_remains | P0-P1 |
-| Аналитика | wb_analytics_detail (воронка v3), wb_analytics_history, wb_analytics_stocks, wb_analytics_antifraud, wb_analytics_acceptance, wb_banned_products, wb_deductions, wb_search_report, wb_search_texts, wb_analytics_brand_share(+brands/parents), wb_analytics_region_sale, wb_analytics_goods_labeling, wb_search_table_details, wb_search_table_groups, wb_search_product_orders | P0-P1 |
-| Заказы FBS | wb_orders_new, wb_orders_list, wb_orders_status, wb_order_cancel, wb_orders_stickers, wb_supply_create/detail/add_orders/deliver/barcode/delete, wb_order_meta_get/set/delete (КИЗ), wb_passes_list/offices/create/update/delete, wb_supply_trbx_list/add/delete/stickers, wb_orders_status_history, wb_orders_client_info, wb_supplies_reshipment, wb_orders_external_stickers | P0-P2 |
-| Заказы DBS (доставка продавцом) | wb_dbs_orders_new, wb_dbs_orders, wb_dbs_orders_status, wb_dbs_orders_client, wb_dbs_orders_delivery_date, wb_dbs_groups_info, wb_dbs_order_action (confirm/deliver/receive/reject/cancel), wb_dbs_order_meta_get/set/delete | P0-P2 |
-| Самовывоз (click-collect) | wb_cc_orders_new, wb_cc_orders, wb_cc_orders_status, wb_cc_orders_client, wb_cc_order_identity, wb_cc_order_action (confirm/prepare/receive/reject/cancel), wb_cc_order_meta_get/set/delete | P0-P2 |
-| Поставки FBW | wb_fbw_supplies, wb_fbw_supply_detail, wb_fbw_supply_goods, wb_fbw_acceptance_options, wb_fbw_warehouses | P1-P2 |
-| Статистика | wb_stats_sales, wb_stats_orders, wb_stats_stocks | P0-P1 |
-| Отзывы | wb_feedbacks_list, wb_feedbacks_count, wb_feedbacks_count_period, wb_feedback_reply, wb_seller_rating, wb_new_feedbacks_questions, wb_feedbacks_actions, wb_feedback_order_return | P1-P2 |
-| Вопросы | wb_questions_list, wb_questions_count, wb_questions_count_period, wb_question_reply, wb_question_get | P1-P2 |
-| Реклама (доп.) | wb_advert_subjects, wb_advert_available_nms | P2 |
-| Возвраты | wb_returns_list, wb_return_answer, wb_goods_return_report | P1 |
-| Склады | wb_warehouses, wb_supplies_list, wb_stocks_update, wb_stocks_get | P2 |
-| Чаты | wb_buyer_chats, wb_chat_events, wb_chat_send | P1 |
-| Документы | wb_documents_categories, wb_documents_list, wb_document_download | P1-P2 |
+```
+Ты: Какие мои карточки заблокированы и почему?
+Ты: Покажи ДРР по всем кампаниям за неделю и выключи те, где он выше 15%.
+Ты: На каких складах коэффициент приёмки сейчас 0 или 1?
+Ты: Ответь на все новые отзывы с оценкой 5 благодарностью.
+```
 
-## Диагностика
+![Дашборд WB MCP Server](docs/img/dashboard.png)
 
-Цель — мгновенно видеть, что сломалось: токен, конкретная категория API или WB изменил API.
+---
 
-- **Страница `/diagnostics`** — статус по каждому магазину: срок действия токена и его права,
-  ping всех 13 хостов WB API, «пробы» (лёгкие реальные запросы по каждой категории),
-  история проверок, кнопка «Проверить сейчас».
-- **Фоновая автопроверка** каждые `HEALTH_CHECK_INTERVAL_MIN` минут (по умолчанию 30).
-- **Детектор деградаций** — если инструмент раньше работал, а теперь стабильно падает,
-  он подсвечивается на дашборде как возможное изменение WB API.
-- **MCP-инструменты**: `wb_diagnostics` (полная проверка), `wb_token_info`,
-  `wb_degradations`, `wb_api_news` (анонсы изменений WB).
-- **`GET /api/health`** — JSON-сводка для мониторинга извне.
+## Что умеет
 
-## Запуск через Docker
+202 инструмента, сгруппированные по разделам Wildberries Seller API.
+Полный нумерованный список с описанием каждого — в **[docs/tools.md](docs/tools.md)**.
+
+| Раздел | Кол-во | Что закрывает |
+|---|---:|---|
+| Карточки товаров | 26 | список и детали карточек, создание и обновление, SEO, характеристики, баркоды, медиа, теги, корзина, **карточки с ошибками и блокировками** |
+| Цены и скидки | 7 | текущие цены, установка цен и скидок, карантин, WB Клуб, B2B, статус загрузки |
+| Акции и автоакции | 7 | календарь промо, автоакции, аудит «куда WB уже добавил товары», вход и выход из акции |
+| Реклама | 22 | список и создание кампаний, статистика и ДРР, ставки и рекомендации, кластеры и минус-фразы, баланс и пополнение |
+| Аналитика | 25 | воронка продаж v3, история по дням, остатки, антифрод, платная приёмка, штрафы за замеры, доля бренда, продажи по регионам, поисковые запросы |
+| Статистика | 3 | продажи, заказы, остатки (statistics-api) |
+| Заказы FBS | 29 | новые и все сборочные задания, статусы, отмена, стикеры, поставки, короба, пропуска, маркировка КИЗ |
+| Заказы DBS | 10 | доставка силами продавца: заказы, статусы, действия, даты доставки, метаданные |
+| Самовывоз (click & collect) | 9 | заказы самовывоза, подтверждение личности покупателя, действия и метаданные |
+| Поставки FBW | 6 | поставки на склады WB, товары в поставке, склады, **коэффициенты приёмки на 14 дней** |
+| Склады и остатки | 8 | склады продавца, обновление и получение остатков |
+| Финансы | 7 | отчёты о реализации, детализация, эквайринг, баланс, данные продавца |
+| Тарифы и хранение | 6 | короба, паллеты, возвраты, комиссии, транзит FBW, платное хранение |
+| Отзывы и вопросы | 18 | отзывы и вопросы, ответы, счётчики за период, архив, закреплённые отзывы, рейтинг продавца |
+| Возвраты | 3 | заявки на возврат, ответ на заявку, отчёт по возвратам |
+| Чаты с покупателями | 4 | чаты, события, отправка сообщений, скачивание вложений |
+| Документы | 4 | категории документов, список, скачивание по одному и пакетом |
+| Пользователи | 2 | сотрудники и приглашения |
+| WB Джем | 1 | статус подписки на Джем |
+| Магазины | 1 | список подключённых магазинов |
+| Диагностика | 4 | самодиагностика, разбор токена, деградации инструментов, новости API WB |
+
+Три вещи, которых обычно нет у похожих серверов:
+
+- **Мульти-магазин.** Каждый вызов принимает `shop_id`, поэтому два кабинета WB живут
+  в одном диалоге. Если магазин один — `shop_id` можно не указывать.
+- **Диагностика WB API.** Сервер сам пингует хосты WB, делает лёгкие пробные запросы
+  по каждой категории, разбирает срок действия и права токена и подсвечивает
+  «деградации»: инструмент раньше работал, а теперь стабильно падает — верный признак,
+  что WB изменил API.
+- **Шифрование токенов.** Токены WB лежат зашифрованными (Fernet), а не в конфиге клиента.
+
+## Быстрый старт
+
+Нужен Docker (Docker Desktop или OrbStack) и токен Wildberries Seller API.
+
+> **Перед первым запуском.** Сейчас сборка «с нуля» подтягивает библиотеку `mcp` 2.x,
+> с которой сервер не стартует. Обходной путь и подробности —
+> в разделе [«Как это устроено»](#как-это-устроено), пункт про версию `mcp`.
 
 ```bash
-cp .env.example .env   # задать MCP_AUTH_TOKEN при внешнем доступе
+git clone https://github.com/DeviceIngineering/wb-mcp-server.git
+cd wb-mcp-server
+cp .env.example .env          # для локального запуска можно оставить как есть
 docker compose up -d --build
 ```
 
-После запуска:
-- **Dashboard**: http://localhost:8001
-- **Диагностика**: http://localhost:8001/diagnostics
-- **Магазины**: http://localhost:8001/shops
-- **Health**: http://localhost:8001/api/health
-- **MCP SSE**: http://localhost:8001/sse
-
-Деплой на отдельный Mac mini и подключение OpenClaw — см. **[DEPLOY.md](DEPLOY.md)**.
-
-## Подключение клиентов
-
-Claude Code:
+Проверка:
 
 ```bash
-claude mcp add --transport sse wildberries "http://<host>:8001/sse" \
-  --header "Authorization: Bearer <MCP_AUTH_TOKEN>"
+curl -s http://localhost:8001/api/health
+# {"status":"ok","auth_enabled":false,"health_check_interval_min":30,...}
 ```
 
-Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+Что открылось:
 
-```json
-{
-  "mcpServers": {
-    "wildberries": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "http://localhost:8001/sse"]
-    }
-  }
-}
+| Адрес | Что это |
+|---|---|
+| <http://localhost:8001> | дашборд: вызовы инструментов, ошибки, время ответа |
+| <http://localhost:8001/shops> | магазины: добавить кабинет WB, проверить токен |
+| <http://localhost:8001/diagnostics> | диагностика: токены, ping хостов WB, пробы, история |
+| <http://localhost:8001/api/health> | JSON-сводка для внешнего мониторинга |
+| `http://localhost:8001/sse` | **MCP-эндпоинт**, его вы даёте клиенту |
+
+Дальше:
+
+1. Откройте <http://localhost:8001/shops> → **Добавить магазин** → вставьте токен WB → **Проверить**.
+   Токен берётся в портале продавца: **Настройки → Доступ к API → Создать токен**
+   (срок жизни 180 дней, остаток виден на странице диагностики).
+2. Подключите MCP-клиент — см. следующий раздел.
+3. Спросите ассистента: «покажи список моих магазинов на Wildberries» — должен сработать
+   инструмент `wb_list_shops`.
+
+Разбор команды запуска:
+
+| Флаг | Зачем |
+|---|---|
+| `up` | поднять сервис, описанный в `docker-compose.yml` |
+| `-d` | в фоне, не занимая терминал |
+| `--build` | собрать образ из `Dockerfile` — нужно при первом запуске и после обновления кода |
+
+Остановить: `docker compose down` (данные останутся в томе `wb_data`).
+Логи: `docker compose logs -f`.
+
+<details>
+<summary>Запуск без Docker</summary>
+
+```bash
+git clone https://github.com/DeviceIngineering/wb-mcp-server.git
+cd wb-mcp-server
+python3 -m venv .venv && source .venv/bin/activate
+pip install .
+DATA_DIR=./data PORT=8001 python -m wb_mcp.app
 ```
 
-OpenClaw / другие MCP-клиенты — SSE URL `http://<host>:8001/sse` + заголовок
-`Authorization: Bearer <MCP_AUTH_TOKEN>` (или `?token=...`).
+`DATA_DIR` указывать обязательно: по умолчанию сервер пишет в `/data` — путь внутри контейнера.
+</details>
 
-## Добавление магазинов
+## Установка в клиенты
 
-Открыть http://localhost:8001/shops → «Добавить магазин» → ввести WB API Token → «Проверить».
+Сервер отдаёт MCP по **SSE**: `GET /sse` — поток событий, `POST /messages` — сообщения клиента.
+Поддержка SSE у клиентов разная, поэтому под каждый есть отдельная инструкция —
+с путями к конфигу на macOS, Linux и Windows, готовым JSON и вариантами с токеном и без.
 
-Ключи шифруются (Fernet) и хранятся в Docker volume `/data`.
+| Клиент | SSE напрямую | Инструкция |
+|---|---|---|
+| Claude Code | да | [docs/claude-code.md](docs/claude-code.md) |
+| Claude Desktop | нет → мост `mcp-remote` или локальный stdio | [docs/claude-desktop.md](docs/claude-desktop.md) |
+| Cursor | да | [docs/cursor.md](docs/cursor.md) |
+| Windsurf | да | [docs/windsurf.md](docs/windsurf.md) |
+| VS Code (GitHub Copilot) | да | [docs/vscode-copilot.md](docs/vscode-copilot.md) |
+| Cline | да | [docs/cline.md](docs/cline.md) |
+| Continue.dev | да | [docs/continue.md](docs/continue.md) |
+| Zed | по URL; поддержка SSE официально не заявлена | [docs/zed.md](docs/zed.md) |
+| JetBrains AI Assistant | да (SSE как legacy) | [docs/jetbrains.md](docs/jetbrains.md) |
+| Gemini CLI | да | [docs/gemini-cli.md](docs/gemini-cli.md) |
+| Codex CLI | нет → мост `mcp-remote` | [docs/codex.md](docs/codex.md) |
 
-Откуда взять токен: Портал продавца WB → **Настройки** → **Доступ к API** → Создать токен
-(действителен 180 дней — срок виден на странице диагностики).
+Общий обзор и таблица совместимости — [docs/README.md](docs/README.md).
 
-## Структура проекта
+Самый короткий вариант, Claude Code:
 
+```bash
+claude mcp add --transport sse wildberries http://localhost:8001/sse
 ```
-wb-mcp-server/
-├── pyproject.toml
-├── Dockerfile
-├── docker-compose.yml          # порт 8001
-├── DEPLOY.md                   # деплой на отдельный Mac mini + OpenClaw
-└── wb_mcp/
-    ├── server.py       # MCP-сервер (166 инструментов, мульти-магазин)
-    ├── client.py       # HTTP-клиенты 14 API Wildberries
-    ├── app.py          # FastAPI (SSE + веб-интерфейс + авторизация + health-loop)
-    ├── diagnostics.py  # ping, JWT-декодер, пробы, новости API
-    ├── settings.py     # Управление магазинами и ключами (Fernet)
-    ├── stats.py        # Статистика вызовов + история проверок (SQLite)
-    └── templates/      # PicoCSS: dashboard, diagnostics, shops
+
+## Мульти-магазин и безопасность
+
+**Несколько кабинетов.** Магазины добавляются на `/shops`, каждый получает свой `shop_id`.
+Инструмент `wb_list_shops` возвращает список; 200 из 202 инструментов принимают `shop_id`
+первым параметром (исключения — `wb_list_shops` и `wb_degradations`).
+Если магазин один, параметр можно опустить: сервер подставит единственный доступный.
+
+**Где лежат токены.** В томе `wb_data` (внутри контейнера — `/data`):
+
+- `shops.json` — магазины, токены зашифрованы Fernet;
+- `.encryption_key` — ключ шифрования, генерируется при первом запуске;
+- `stats.db` — SQLite со статистикой вызовов и историей диагностики.
+
+Ключ лежит рядом с зашифрованными данными, поэтому шифрование защищает от случайной
+утечки одного файла `shops.json` (бэкап, копипаста), но не от того, кто получил доступ
+ко всему тому. Переносить данные нужно томом целиком — см. [DEPLOY.md](DEPLOY.md).
+
+**Авторизация MCP.** Переменная `MCP_AUTH_TOKEN` в `.env`:
+
+```bash
+openssl rand -hex 32   # значение вписать в .env → MCP_AUTH_TOKEN=
+docker compose up -d
 ```
 
-## API-разделы Wildberries
+- пусто (по умолчанию) — `/sse` открыт всем, у кого есть сетевой доступ к порту;
+- задан — клиент обязан передать `Authorization: Bearer <токен>` **или** `?token=<токен>`
+  в URL. Второй вариант выручает клиенты, которые не умеют произвольные заголовки.
+
+**Чего сервер не делает:**
+
+- Веб-интерфейс (`/`, `/shops`, `/diagnostics`) и `POST /messages` токеном **не закрыты**:
+  проверка выполняется только на `GET /sse`. Держите порт 8001 в доверенной сети.
+- Порт 8001 не рассчитан на проброс в интернет. Для доступа извне — Tailscale или VPN.
+- HTTPS сервер не терминирует. Нужен внешний доступ по TLS — ставьте reverse proxy.
+
+## Как это устроено
+
+Один Docker-контейнер, внутри FastAPI-приложение, которое совмещает две роли:
+MCP-сервер по SSE и небольшой веб-интерфейс. По файлу на абзац:
+
+- **`wb_mcp/server.py`** — сам MCP-сервер. Список `TOOLS` из 202 объектов `Tool` (имя,
+  описание, JSON-схема аргументов) — это то, что клиент получает в ответ на `tools/list`.
+  Вызовы разводятся тремя словарями: `NO_CLIENT_DISPATCH` (доступ к WB не нужен),
+  `CLIENT_DISPATCH` (нужен HTTP-клиент магазина), `SHOP_DISPATCH` (нужен ещё и `shop_id`).
+  Тут же живёт stdio-точка входа `main()` — на случай клиента, который умеет только stdio.
+- **`wb_mcp/client.py`** — HTTP-клиенты 14 хостов Wildberries. Один `WBClient` на магазин,
+  внутри `httpx.AsyncClient` с токеном; клиенты кэшируются в пуле по `shop_id`.
+- **`wb_mcp/app.py`** — FastAPI: `GET /sse` и `POST /messages` для MCP, страницы дашборда,
+  магазинов и диагностики, JSON-API `/api/*`, проверка `MCP_AUTH_TOKEN`, фоновый цикл
+  health-проверок.
+- **`wb_mcp/settings.py`** — магазины и ключи: чтение и запись `shops.json`, шифрование
+  Fernet, миграция старого однокабинетного `settings.json`, маскирование токенов для UI.
+  Есть fallback: если задана переменная `WB_API_TOKEN`, появляется магазин `default`.
+- **`wb_mcp/diagnostics.py`** — ping хостов WB, декодер JWT-токена (срок, права, sandbox),
+  «пробы» — по одному лёгкому реальному запросу на категорию API, новости WB.
+- **`wb_mcp/stats.py`** — SQLite через aiosqlite: каждый вызов инструмента пишется с временем,
+  успехом и `shop_id`; отсюда берутся детектор деградаций и история health-проверок.
+- **`wb_mcp/templates/`** — три страницы на PicoCSS, без сборки фронтенда.
+
+Неочевидные места:
+
+- **`shop_id` подставляется сам, пока магазин один.** Удобно в быту, но при добавлении
+  второго кабинета запросы без `shop_id` начнут возвращать «Укажите shop_id».
+- **В статистику пишется каждый вызов**, включая упавшие. Отсюда работает детектор
+  деградаций: «раньше работало, теперь стабильно падает» — сигнал изменения WB API,
+  а не вашей ошибки. Смотреть: инструмент `wb_degradations` или дашборд.
+- **Фоновая диагностика раз в 30 минут** делает реальные запросы к WB и расходует лимиты.
+  Мешает — поставьте `HEALTH_CHECK_INTERVAL_MIN=0` в `.env`.
+- **Ответы возвращаются как есть**, сырым JSON от WB, без переупаковки. Инструменты от этого
+  предсказуемы, но крупные отчёты стоит запрашивать с фильтрами, иначе ответ съест контекст.
+- **В логах контейнера на каждое MCP-сообщение появляется** `RuntimeError: Unexpected ASGI
+  message 'http.response.start' sent, after response already completed`. Это следствие того,
+  что `POST /messages` обёрнут в маршрут FastAPI, а не смонтирован как ASGI-приложение.
+  Сообщение к этому моменту уже принято (`202 Accepted`) и обработано — на проверке
+  официальным MCP-клиентом Python (`mcp` 1.29.0) `initialize`, `tools/list` и вызов
+  инструмента отработали штатно. Но соединение на каждом POST рвётся, поэтому
+  клиенты, которые переиспользуют keep-alive, могут споткнуться. Ошибка в логе —
+  ожидаемая, а не признак поломки.
+- **Версия библиотеки `mcp` — известная проблема.** Сервер написан под декораторное API
+  `mcp` 1.x (`@app.list_tools()`); в `mcp` 2.0 его убрали. В `pyproject.toml` указано
+  `mcp[cli]>=1.0.0` без верхней границы, поэтому свежая установка тянет `mcp` 2.x
+  и падает на старте с `AttributeError: 'Server' object has no attribute 'list_tools'`.
+  До того, как ограничение появится в `pyproject.toml`, обходной путь — поставить
+  библиотеку 1.x явно:
+
+  ```bash
+  pip install "mcp[cli]<2.0.0"          # локальный запуск
+  ```
+
+  Для Docker — добавить ту же строку в `Dockerfile` после `pip install .`
+  либо дождаться исправления в репозитории.
+
+Переменные окружения:
+
+| Переменная | По умолчанию | Значение |
+|---|---|---|
+| `WB_API_TOKEN` | пусто | токен для магазина `default`; удобнее добавлять магазины через `/shops` |
+| `MCP_AUTH_TOKEN` | пусто | Bearer-токен для `/sse`; пусто — авторизация выключена |
+| `HEALTH_CHECK_INTERVAL_MIN` | `30` | период фоновой диагностики, `0` — выключить |
+| `DATA_DIR` | `/data` | каталог с `shops.json`, `.encryption_key`, `stats.db` |
+| `PORT` | `8001` | порт HTTP-сервера |
+
+## Ограничения Wildberries API
+
+Это ограничения самого WB, а не сервера, — но ассистент будет натыкаться на них регулярно,
+и знать о них лучше заранее.
+
+- `GET /adv/v3/fullstats` (статистика рекламы) — **3 запроса в минуту**, период не больше 31 дня.
+- Воронка продаж v3 — **3 запроса в минуту**; история по дням доступна максимум
+  за последнюю неделю.
+- `/ping` — 3 запроса за 30 секунд на хост (фоновая диагностика это учитывает).
+- **Любой ответ 4XX засчитывается WB как 10 запросов** к лимиту (правило с 04.06.2026).
+  Один неверный параметр в цикле — и вы упёрлись в лимит.
+- `reportDetailByPeriod` удаляется 15.07.2026; сервер уже ходит в finance-api
+  с fallback на старый эндпоинт.
+- Создание поставок FBW через API невозможно — только в личном кабинете.
+  Инструменты `wb_fbw_*` информационные.
+- Токен WB живёт 180 дней. Остаток показывают `wb_token_info` и страница `/diagnostics`.
+- Ответ `429` от WB — это лимит, а не поломка. Повторите через минуту.
+
+Сверено с документацией dev.wildberries.ru по состоянию на июнь 2026.
+
+## Технический справочник
+
+### Хосты Wildberries Seller API
 
 | API | Базовый URL |
 |-----|-------------|
@@ -137,14 +303,51 @@ wb-mcp-server/
 | Buyer Chat | buyer-chat-api.wildberries.ru |
 | Documents | documents-api.wildberries.ru |
 
-## Известные ограничения WB API (июнь 2026)
+### Диагностика
 
-- `GET /adv/v3/fullstats` — лимит 3 запроса/мин, период ≤ 31 дня.
-- Воронка продаж v3 — лимит 3 запроса/мин; история по дням — максимум за последнюю неделю.
-- `/ping` — лимит 3 запроса за 30 сек на хост (фоновая диагностика учитывает).
-- Любой ответ 4XX засчитывается WB как 10 запросов к лимиту (с 04.06.2026).
-- `reportDetailByPeriod` удаляется 15.07.2026 — сервер уже использует finance-api с fallback.
-- Создание поставок FBW через API невозможно (только ЛК) — API информационный.
+- **Страница `/diagnostics`** — по каждому магазину: срок действия токена и его права,
+  ping всех хостов WB API, пробы по категориям, история проверок, кнопка «Проверить сейчас».
+- **Фоновая автопроверка** каждые `HEALTH_CHECK_INTERVAL_MIN` минут.
+- **Детектор деградаций** — подсвечивает на дашборде инструменты, которые перестали работать.
+- **MCP-инструменты**: `wb_diagnostics`, `wb_token_info`, `wb_degradations`, `wb_api_news`.
+- **`GET /api/health`** — JSON-сводка для мониторинга извне.
+- **`POST /api/diagnostics/run`** — прогнать проверку всех магазинов прямо сейчас.
+- **`GET /api/diagnostics/<shop_id>`** — полная диагностика одного магазина.
+
+### Структура проекта
+
+```
+wb-mcp-server/
+├── docker-compose.yml          # порт 8001, том wb_data
+├── Dockerfile                  # python:3.12-slim
+├── pyproject.toml
+├── DEPLOY.md                   # деплой на отдельную машину, перенос данных
+├── docs/                       # подключение клиентов + справочник инструментов
+└── wb_mcp/
+    ├── server.py       # MCP-сервер: 202 инструмента, диспетчеризация, stdio-режим
+    ├── client.py       # HTTP-клиенты 14 API Wildberries
+    ├── app.py          # FastAPI: SSE + веб-интерфейс + авторизация + health-loop
+    ├── diagnostics.py  # ping, JWT-декодер, пробы, новости API
+    ├── settings.py     # магазины и ключи (Fernet)
+    ├── stats.py        # статистика вызовов и история проверок (SQLite)
+    └── templates/      # PicoCSS: dashboard, diagnostics, shops
+```
+
+### Деплой
+
+Вынести сервер на отдельную машину, перенести магазины, настроить автозапуск —
+см. **[DEPLOY.md](DEPLOY.md)**.
+
+## Обновления и поддержка
+
+Wildberries меняет API постоянно: эндпоинты добавляются, переименовываются и отключаются —
+в разделе про ограничения перечислено то, что уже поймано на практике.
+Этот сервер — рабочий инструмент автора, и обновляется он **по мере собственной
+необходимости**: когда очередное изменение ломает что-то в его магазинах.
+Расписания и обязательств по срокам нет.
+
+Если исправление нужно срочно — напишите на **d0371153@gmail.com**.
+Issues и pull request'ы тоже приветствуются и разбираются.
 
 ## Лицензия
 
