@@ -1,4 +1,10 @@
-[Русский](README.md) · [中文](README.zh.md)
+<div align="center">
+
+[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8B949E?style=for-the-badge)](README.md)
+![English](https://img.shields.io/badge/English-0A66C2?style=for-the-badge)
+[![中文](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-8B949E?style=for-the-badge)](README.zh.md)
+
+</div>
 
 # WB MCP Server
 
@@ -73,11 +79,6 @@ Three things similar servers usually do not have:
 ## Quick start
 
 You need Docker (Docker Desktop or OrbStack) and a Wildberries Seller API token.
-
-> **Before the first run.** On the current `main`, a build from scratch pulls the `mcp` 2.x
-> library, which the server does not start with. The fix lives in the `fix/startup` branch
-> (PR #2); until it is merged, use the workaround from
-> [How it works](#how-it-works), under the `mcp` version note.
 
 ```bash
 git clone https://github.com/DeviceIngineering/wb-mcp-server.git
@@ -229,14 +230,12 @@ docker compose up -d
 - set — the client must send `Authorization: Bearer <token>` **or** `?token=<token>`
   in the URL. The second form rescues clients that cannot send custom headers.
 
+The token is checked on both MCP endpoints — on `GET /sse` and on `POST /messages`.
+
 **What the server does not do:**
 
 - The web UI (`/`, `/shops`, `/diagnostics`) is **not** protected by the token — it is open
   to anyone with network access to the port.
-- On the current `main`, **`POST /messages` does not check the token either**: the check
-  only guards `GET /sse`, so the protection is incomplete. The fix is in the `fix/startup`
-  branch (PR #2); once merged, both endpoints are checked. Until then keep port 8001 inside
-  a trusted network and do not treat `MCP_AUTH_TOKEN` as sufficient protection.
 - Port 8001 is not meant to be exposed to the internet. For remote access use Tailscale or a VPN.
 - The server does not terminate HTTPS. If you need TLS from outside, put a reverse proxy in front.
 
@@ -251,6 +250,8 @@ filled these pages — and produced the WB limits section further down.
 
 ### Dashboard — `/`
 
+The screenshot is at the top of this page.
+
 A summary of all tool calls (`stats.get_summary()`):
 
 - total calls, calls today, number of errors, average call duration;
@@ -260,6 +261,8 @@ A summary of all tool calls (`stats.get_summary()`):
 - **a per-store filter** — an "All / specific account" switch above the summary.
 
 ### Stores — `/shops`
+
+![The stores page](docs/img/shops.png)
 
 Accounts are added and removed right in the browser, with no file editing and no container
 restart. Each store has a **Проверить** ("Test") button: it makes one cheap real request to WB
@@ -271,6 +274,13 @@ is in `.encryption_key` next to it. The HTTP client pool is reset when a store i
 deleted, so a new token takes effect immediately.
 
 ### Diagnostics — `/diagnostics`
+
+![The diagnostics page](docs/img/diagnostics.png)
+
+*(the screenshot shows a demo store with a made-up token: WB answers `401` to every ping and
+every probe, so the whole page is red. That is what a failed check looks like — the server
+itself is fine. With a working token the "Проверка …" line reads `ping 13/13, пробы 20/20`
+and the store status is "✅ Здоров".)*
 
 A background check every `HEALTH_CHECK_INTERVAL_MIN` minutes (30 by default), per store:
 
@@ -351,29 +361,16 @@ Non-obvious details:
 - **Responses are returned as-is**, the raw JSON from WB, with no repackaging. That keeps
   the tools predictable, but large reports should be requested with filters or the answer
   will eat your context window.
-- **The container log prints, on every MCP message,** `RuntimeError: Unexpected ASGI
-  message 'http.response.start' sent, after response already completed`. This is a
-  consequence of `POST /messages` being wrapped in a FastAPI route instead of being mounted
-  as an ASGI app. By that point the message has already been accepted (`202 Accepted`) and
-  processed — in a check with the official Python MCP client (`mcp` 1.29.0), `initialize`,
-  `tools/list` and a tool call all worked normally. The connection is dropped on each POST
-  though, so clients that reuse keep-alive connections may trip over it. This is also fixed
-  in the `fix/startup` branch (PR #2).
-- **The `mcp` library version — a known issue.** The server is written against the
-  decorator API of `mcp` 1.x (`@app.list_tools()`), which was removed in `mcp` 2.0.
-  `pyproject.toml` declares `mcp[cli]>=1.0.0` with no upper bound, so a fresh install pulls
-  `mcp` 2.x and crashes on start with
+- **`POST /messages` is mounted as a separate ASGI app** (`Mount`) rather than as an
+  ordinary FastAPI route: `handle_post_message` sends the ASGI response itself, and inside
+  a route the framework would send it a second time — the connection would be dropped on
+  every POST. That is why authorization for this endpoint is checked manually inside the app.
+- **The `mcp` library version is pinned to `>=1.0.0,<2`.** The server is written against
+  the decorator API of `mcp` 1.x (`@app.list_tools()`), removed in `mcp` 2.0. Do not lift
+  the upper bound in `pyproject.toml`: with `mcp` 2.x the server crashes on start with
   `AttributeError: 'Server' object has no attribute 'list_tools'`.
-  The `<2.0.0` constraint has been added in the `fix/startup` branch (PR #2). Until it is
-  merged, install the 1.x line explicitly:
 
-  ```bash
-  pip install "mcp[cli]<2.0.0"          # local run
-  ```
-
-  For Docker, add the same line to the `Dockerfile` after `pip install .`.
-
-Environment variables:
+## Environment variables
 
 | Variable | Default | Meaning |
 |---|---|---|

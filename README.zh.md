@@ -1,4 +1,10 @@
-[Русский](README.md) · [English](README.en.md)
+<div align="center">
+
+[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8B949E?style=for-the-badge)](README.md)
+[![English](https://img.shields.io/badge/English-8B949E?style=for-the-badge)](README.en.md)
+![中文](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-0A66C2?style=for-the-badge)
+
+</div>
 
 # WB MCP Server
 
@@ -70,10 +76,6 @@
 ## 快速上手
 
 需要 Docker（Docker Desktop 或 OrbStack）和一个 Wildberries Seller API 令牌。
-
-> **首次运行前请注意。** 在当前的 `main` 分支上，从零构建会拉取 `mcp` 2.x 库，
-> 服务器无法用它启动。修复位于 `fix/startup` 分支（PR #2）；在其合并之前，
-> 请使用[工作原理](#工作原理)中关于 `mcp` 版本那一条给出的绕过方法。
 
 ```bash
 git clone https://github.com/DeviceIngineering/wb-mcp-server.git
@@ -216,13 +218,12 @@ docker compose up -d
 - 已设置 —— 客户端必须发送 `Authorization: Bearer <令牌>`，**或者**在 URL 里带
   `?token=<令牌>`。后一种写法可以救那些无法自定义请求头的客户端。
 
+两个 MCP 端点都会校验令牌——`GET /sse` 和 `POST /messages` 都会。
+
 **服务器不负责的事：**
 
 - Web 界面（`/`、`/shops`、`/diagnostics`）**没有**令牌保护——
   任何能访问该端口的人都能打开。
-- 在当前的 `main` 分支上，**`POST /messages` 同样不校验令牌**：只有 `GET /sse` 会校验，
-  因此保护并不完整。修复位于 `fix/startup` 分支（PR #2），合并后两个端点都会校验。
-  在此之前请把 8001 端口留在可信网络内，不要把 `MCP_AUTH_TOKEN` 当作足够的防护。
 - 8001 端口不适合直接暴露到公网。需要远程访问请用 Tailscale 或 VPN。
 - 服务器不终止 HTTPS。需要对外提供 TLS，请在前面加反向代理。
 
@@ -236,6 +237,8 @@ docker compose up -d
 
 ### 控制台 —— `/`
 
+截图见本页开头。
+
 所有工具调用的汇总（`stats.get_summary()`）：
 
 - 总调用次数、今日调用次数、错误数、平均调用耗时；
@@ -244,6 +247,8 @@ docker compose up -d
 - **按店铺过滤** —— 汇总区上方的"全部 / 指定账号"切换。
 
 ### 店铺 —— `/shops`
+
+![店铺页面](docs/img/shops.png)
 
 账号可以直接在浏览器里添加和删除，不用改文件，也不用重启容器。
 每个店铺都有一个 **Проверить**（测试）按钮：它会向 WB 发一个轻量的真实请求，
@@ -254,6 +259,13 @@ docker compose up -d
 `.encryption_key`。保存或删除店铺时会重置 HTTP 客户端池，因此新令牌立即生效。
 
 ### 自诊断 —— `/diagnostics`
+
+![自诊断页面](docs/img/diagnostics.png)
+
+*（截图里是一个使用虚构令牌的演示店铺：WB 对每一次 ping 和每一次探测都返回 `401`，
+所以整页都是红色。检查失败时就是这个样子——服务器本身是正常的。
+若令牌可用，"Проверка …" 那一行会显示 `ping 13/13, пробы 20/20`，
+店铺状态为"✅ Здоров"。）*
 
 每 `HEALTH_CHECK_INTERVAL_MIN` 分钟（默认 30 分钟）执行一次后台检查，按店铺给出：
 
@@ -330,26 +342,15 @@ docker compose up -d
   如果这带来困扰，在 `.env` 里设置 `HEALTH_CHECK_INTERVAL_MIN=0`。
 - **返回原样的数据**：WB 的原始 JSON，不做二次封装。这让工具行为可预测，
   但大体量报表最好带上过滤条件，否则返回内容会占满模型的上下文。
-- **容器日志在每条 MCP 消息时都会打印** `RuntimeError: Unexpected ASGI message
-  'http.response.start' sent, after response already completed`。
-  原因是 `POST /messages` 被包在 FastAPI 路由里，而不是作为 ASGI 应用挂载。
-  出现该日志时消息其实已被接收（`202 Accepted`）并处理完毕——
-  用官方 Python MCP 客户端（`mcp` 1.29.0）实测，`initialize`、`tools/list`
-  和工具调用都正常。但每次 POST 后连接会断开，因此复用 keep-alive 连接的客户端
-  可能会出问题。这一点同样已在 `fix/startup` 分支（PR #2）中修复。
-- **`mcp` 库版本——已知问题。** 服务器基于 `mcp` 1.x 的装饰器 API（`@app.list_tools()`）
-  编写，该 API 在 `mcp` 2.0 中被移除。`pyproject.toml` 里写的是 `mcp[cli]>=1.0.0`，
-  没有上界，所以全新安装会拉到 `mcp` 2.x，启动时报
+- **`POST /messages` 是作为独立的 ASGI 应用挂载的**（`Mount`），而不是普通的 FastAPI
+  路由：`handle_post_message` 会自己发送 ASGI 响应，若包在路由里，框架会再发一次，
+  导致每次 POST 后连接被断开。因此该端点的鉴权是在应用内部手工校验的。
+- **`mcp` 库版本已固定为 `>=1.0.0,<2`。** 服务器基于 `mcp` 1.x 的装饰器 API
+  （`@app.list_tools()`）编写，该 API 在 `mcp` 2.0 中被移除。请不要去掉
+  `pyproject.toml` 里的上界：使用 `mcp` 2.x 时服务器会在启动时报
   `AttributeError: 'Server' object has no attribute 'list_tools'`。
-  `<2.0.0` 这一限制已在 `fix/startup` 分支（PR #2）中加上。在其合并之前，请显式安装 1.x：
 
-  ```bash
-  pip install "mcp[cli]<2.0.0"          # 本地运行
-  ```
-
-  使用 Docker 时，在 `Dockerfile` 的 `pip install .` 之后加上同一行。
-
-环境变量：
+## 环境变量
 
 | 变量 | 默认值 | 含义 |
 |---|---|---|
