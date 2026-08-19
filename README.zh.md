@@ -69,8 +69,9 @@
 
 需要 Docker（Docker Desktop 或 OrbStack）和一个 Wildberries Seller API 令牌。
 
-> **首次运行前请注意。** 目前从零构建会拉取 `mcp` 2.x 库，服务器无法用它启动。
-> 绕过方法与详情见[工作原理](#工作原理)中关于 `mcp` 版本的说明。
+> **首次运行前请注意。** 在当前的 `main` 分支上，从零构建会拉取 `mcp` 2.x 库，
+> 服务器无法用它启动。修复位于 `fix/startup` 分支（PR #2）；在其合并之前，
+> 请使用[工作原理](#工作原理)中关于 `mcp` 版本那一条给出的绕过方法。
 
 ```bash
 git clone https://github.com/DeviceIngineering/wb-mcp-server.git
@@ -215,8 +216,11 @@ docker compose up -d
 
 **服务器不负责的事：**
 
-- Web 界面（`/`、`/shops`、`/diagnostics`）和 `POST /messages` **没有**令牌保护：
-  只有 `GET /sse` 会校验。请把 8001 端口留在可信网络内。
+- Web 界面（`/`、`/shops`、`/diagnostics`）**没有**令牌保护——
+  任何能访问该端口的人都能打开。
+- 在当前的 `main` 分支上，**`POST /messages` 同样不校验令牌**：只有 `GET /sse` 会校验，
+  因此保护并不完整。修复位于 `fix/startup` 分支（PR #2），合并后两个端点都会校验。
+  在此之前请把 8001 端口留在可信网络内，不要把 `MCP_AUTH_TOKEN` 当作足够的防护。
 - 8001 端口不适合直接暴露到公网。需要远程访问请用 Tailscale 或 VPN。
 - 服务器不终止 HTTPS。需要对外提供 TLS，请在前面加反向代理。
 
@@ -330,19 +334,18 @@ docker compose up -d
   出现该日志时消息其实已被接收（`202 Accepted`）并处理完毕——
   用官方 Python MCP 客户端（`mcp` 1.29.0）实测，`initialize`、`tools/list`
   和工具调用都正常。但每次 POST 后连接会断开，因此复用 keep-alive 连接的客户端
-  可能会出问题。这条日志属于预期现象，不代表服务坏了。
+  可能会出问题。这一点同样已在 `fix/startup` 分支（PR #2）中修复。
 - **`mcp` 库版本——已知问题。** 服务器基于 `mcp` 1.x 的装饰器 API（`@app.list_tools()`）
   编写，该 API 在 `mcp` 2.0 中被移除。`pyproject.toml` 里写的是 `mcp[cli]>=1.0.0`，
   没有上界，所以全新安装会拉到 `mcp` 2.x，启动时报
   `AttributeError: 'Server' object has no attribute 'list_tools'`。
-  在 `pyproject.toml` 加上限制之前，请显式安装 1.x：
+  `<2.0.0` 这一限制已在 `fix/startup` 分支（PR #2）中加上。在其合并之前，请显式安装 1.x：
 
   ```bash
   pip install "mcp[cli]<2.0.0"          # 本地运行
   ```
 
-  使用 Docker 时，在 `Dockerfile` 的 `pip install .` 之后加上同一行，
-  或者等待仓库修复。
+  使用 Docker 时，在 `Dockerfile` 的 `pip install .` 之后加上同一行。
 
 环境变量：
 

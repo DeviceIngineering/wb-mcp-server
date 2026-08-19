@@ -72,8 +72,9 @@ Three things similar servers usually do not have:
 
 You need Docker (Docker Desktop or OrbStack) and a Wildberries Seller API token.
 
-> **Before the first run.** A build from scratch currently pulls the `mcp` 2.x library,
-> which the server does not start with. The workaround and the details are in
+> **Before the first run.** On the current `main`, a build from scratch pulls the `mcp` 2.x
+> library, which the server does not start with. The fix lives in the `fix/startup` branch
+> (PR #2); until it is merged, use the workaround from
 > [How it works](#how-it-works), under the `mcp` version note.
 
 ```bash
@@ -228,8 +229,12 @@ docker compose up -d
 
 **What the server does not do:**
 
-- The web UI (`/`, `/shops`, `/diagnostics`) and `POST /messages` are **not** protected by
-  the token: the check runs only on `GET /sse`. Keep port 8001 inside a trusted network.
+- The web UI (`/`, `/shops`, `/diagnostics`) is **not** protected by the token — it is open
+  to anyone with network access to the port.
+- On the current `main`, **`POST /messages` does not check the token either**: the check
+  only guards `GET /sse`, so the protection is incomplete. The fix is in the `fix/startup`
+  branch (PR #2); once merged, both endpoints are checked. Until then keep port 8001 inside
+  a trusted network and do not treat `MCP_AUTH_TOKEN` as sufficient protection.
 - Port 8001 is not meant to be exposed to the internet. For remote access use Tailscale or a VPN.
 - The server does not terminate HTTPS. If you need TLS from outside, put a reverse proxy in front.
 
@@ -350,21 +355,21 @@ Non-obvious details:
   as an ASGI app. By that point the message has already been accepted (`202 Accepted`) and
   processed — in a check with the official Python MCP client (`mcp` 1.29.0), `initialize`,
   `tools/list` and a tool call all worked normally. The connection is dropped on each POST
-  though, so clients that reuse keep-alive connections may trip over it. The log line is
-  expected, not a sign of breakage.
+  though, so clients that reuse keep-alive connections may trip over it. This is also fixed
+  in the `fix/startup` branch (PR #2).
 - **The `mcp` library version — a known issue.** The server is written against the
   decorator API of `mcp` 1.x (`@app.list_tools()`), which was removed in `mcp` 2.0.
   `pyproject.toml` declares `mcp[cli]>=1.0.0` with no upper bound, so a fresh install pulls
   `mcp` 2.x and crashes on start with
   `AttributeError: 'Server' object has no attribute 'list_tools'`.
-  Until the constraint lands in `pyproject.toml`, install the 1.x line explicitly:
+  The `<2.0.0` constraint has been added in the `fix/startup` branch (PR #2). Until it is
+  merged, install the 1.x line explicitly:
 
   ```bash
   pip install "mcp[cli]<2.0.0"          # local run
   ```
 
-  For Docker, add the same line to the `Dockerfile` after `pip install .`, or wait for the
-  fix in the repository.
+  For Docker, add the same line to the `Dockerfile` after `pip install .`.
 
 Environment variables:
 
