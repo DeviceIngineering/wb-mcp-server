@@ -1,7 +1,33 @@
 [project]
 name = "wb-mcp-server"
 version = "2.2.0"
-description = "MCP-сервер для Wildberries Seller API (товары, цены, заказы, финансы, реклама, аналитика, акции, FBW, диагностика, отзывы-пины, Джем-аналитика, замеры, эквайринг)"
+description = "MCP server for Wildberries Seller API: 202 tools for products, prices, orders, ads, supplies, reviews, finance and analytics"
+readme = "README.en.md"
+license = { file = "LICENSE" }
+authors = [{ name = "DeviceIngineering" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "wildberries",
+    "wb-api",
+    "seller-api",
+    "marketplace",
+    "ecommerce",
+    "claude",
+    "ai-agents",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 requires-python = ">=3.10"
 dependencies = [
     # ВНИМАНИЕ: верхняя граница обязательна.
@@ -21,6 +47,11 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "cryptography>=43.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/DeviceIngineering/wb-mcp-server"
+Repository = "https://github.com/DeviceIngineering/wb-mcp-server"
+Issues = "https://github.com/DeviceIngineering/wb-mcp-server/issues"
 
 [build-system]
 requires = ["hatchling"]
