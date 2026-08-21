@@ -147,17 +147,17 @@ DATA_DIR=./data PORT=8001 python -m wb_mcp.app
 
 | 客户端 | 是否直接支持 SSE | 说明文档 |
 |---|---|---|
-| Claude Code | 是 | [docs/claude-code.md](docs/claude-code.md) |
-| Claude Desktop | 否 → 需 `mcp-remote` 桥接或本地 stdio | [docs/claude-desktop.md](docs/claude-desktop.md) |
-| Cursor | 是 | [docs/cursor.md](docs/cursor.md) |
-| Windsurf | 是 | [docs/windsurf.md](docs/windsurf.md) |
-| VS Code（GitHub Copilot） | 是 | [docs/vscode-copilot.md](docs/vscode-copilot.md) |
-| Cline | 是 | [docs/cline.md](docs/cline.md) |
-| Continue.dev | 是 | [docs/continue.md](docs/continue.md) |
-| Zed | 支持按 URL 接入；官方未声明支持 SSE | [docs/zed.md](docs/zed.md) |
-| JetBrains AI Assistant | 是（SSE 作为遗留传输方式） | [docs/jetbrains.md](docs/jetbrains.md) |
-| Gemini CLI | 是 | [docs/gemini-cli.md](docs/gemini-cli.md) |
-| Codex CLI | 否 → 需 `mcp-remote` 桥接 | [docs/codex.md](docs/codex.md) |
+| Claude Code | 是 | [docs/install-claude-code.md](docs/install-claude-code.md) |
+| Claude Desktop | 否 → 需 `mcp-remote` 桥接或本地 stdio | [docs/install-claude-desktop.md](docs/install-claude-desktop.md) |
+| Cursor | 是 | [docs/install-cursor.md](docs/install-cursor.md) |
+| Windsurf | 是 | [docs/install-windsurf.md](docs/install-windsurf.md) |
+| VS Code（GitHub Copilot） | 是 | [docs/install-vscode-copilot.md](docs/install-vscode-copilot.md) |
+| Cline | 是 | [docs/install-cline.md](docs/install-cline.md) |
+| Continue.dev | 是 | [docs/install-continue.md](docs/install-continue.md) |
+| Zed | 支持按 URL 接入；官方未声明支持 SSE | [docs/install-zed.md](docs/install-zed.md) |
+| JetBrains AI Assistant | 是（SSE 作为遗留传输方式） | [docs/install-jetbrains.md](docs/install-jetbrains.md) |
+| Gemini CLI | 是 | [docs/install-gemini-cli.md](docs/install-gemini-cli.md) |
+| Codex CLI | 否 → 需 `mcp-remote` 桥接 | [docs/install-codex.md](docs/install-codex.md) |
 
 总览与兼容性表格见 [docs/README.md](docs/README.md)。
 

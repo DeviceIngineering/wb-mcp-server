@@ -45,17 +45,17 @@ curl -sN --max-time 3 http://localhost:8001/sse | head -2
 
 | Клиент | Как подключается | Заголовок `Authorization` | Инструкция |
 |---|---|---|---|
-| Claude Code | нативно, `--transport sse` | да | [claude-code.md](claude-code.md) |
-| Cursor | нативно, `url` в `mcp.json` | да | [cursor.md](cursor.md) |
-| Windsurf | нативно, `serverUrl` | да | [windsurf.md](windsurf.md) |
-| VS Code (Copilot) | нативно, `"type": "sse"` | да | [vscode-copilot.md](vscode-copilot.md) |
-| Cline | нативно, `"type": "sse"` | да | [cline.md](cline.md) |
-| Continue.dev | нативно, `type: sse` | да, через `requestOptions.headers` | [continue.md](continue.md) |
-| Gemini CLI | нативно, `url` | да | [gemini-cli.md](gemini-cli.md) |
-| JetBrains AI Assistant | нативно, SSE как legacy | не документирован → `?token=` | [jetbrains.md](jetbrains.md) |
-| Zed | по `url`; SSE официально не заявлен | да | [zed.md](zed.md) |
-| Claude Desktop | только stdio → мост `mcp-remote` | через мост | [claude-desktop.md](claude-desktop.md) |
-| Codex CLI | SSE не поддерживает → мост `mcp-remote` | через мост | [codex.md](codex.md) |
+| Claude Code | нативно, `--transport sse` | да | [install-claude-code.md](install-claude-code.md) |
+| Cursor | нативно, `url` в `mcp.json` | да | [install-cursor.md](install-cursor.md) |
+| Windsurf | нативно, `serverUrl` | да | [install-windsurf.md](install-windsurf.md) |
+| VS Code (Copilot) | нативно, `"type": "sse"` | да | [install-vscode-copilot.md](install-vscode-copilot.md) |
+| Cline | нативно, `"type": "sse"` | да | [install-cline.md](install-cline.md) |
+| Continue.dev | нативно, `type: sse` | да, через `requestOptions.headers` | [install-continue.md](install-continue.md) |
+| Gemini CLI | нативно, `url` | да | [install-gemini-cli.md](install-gemini-cli.md) |
+| JetBrains AI Assistant | нативно, SSE как legacy | не документирован → `?token=` | [install-jetbrains.md](install-jetbrains.md) |
+| Zed | по `url`; SSE официально не заявлен | да | [install-zed.md](install-zed.md) |
+| Claude Desktop | только stdio → мост `mcp-remote` | через мост | [install-claude-desktop.md](install-claude-desktop.md) |
+| Codex CLI | SSE не поддерживает → мост `mcp-remote` | через мост | [install-codex.md](install-codex.md) |
 
 Формулировки «нативно» и «не поддерживает» взяты из официальной документации клиентов;
 там, где документация молчит, это отмечено прямо в соответствующем файле.
@@ -98,4 +98,4 @@ npx -p mcp-remote@latest mcp-remote-client http://localhost:8001/sse --allow-htt
 Сервер можно запустить и как stdio-процесс (`wb-mcp`), но тогда теряются
 мульти-магазин через веб-интерфейс, шифрование токенов в томе, дашборд и фоновая
 диагностика, а токен WB приходится класть в конфиг клиента открытым текстом.
-Вариант со stdio описан в [claude-desktop.md](claude-desktop.md) как запасной.
+Вариант со stdio описан в [install-claude-desktop.md](install-claude-desktop.md) как запасной.

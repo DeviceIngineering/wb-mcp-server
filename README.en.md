@@ -1,16 +1,16 @@
 <div align="center">
 
-[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8B949E?style=for-the-badge)](README.md)
+[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8B949E?style=for-the-badge)](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/README.md)
 ![English](https://img.shields.io/badge/English-0A66C2?style=for-the-badge)
-[![中文](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-8B949E?style=for-the-badge)](README.zh.md)
+[![中文](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-8B949E?style=for-the-badge)](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/README.zh.md)
 
 </div>
 
 # WB MCP Server
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
-[![MCP tools](https://img.shields.io/badge/MCP%20tools-202-orange.svg)](docs/tools.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/pyproject.toml)
+[![MCP tools](https://img.shields.io/badge/MCP%20tools-202-orange.svg)](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/tools.md)
 [![PyPI](https://img.shields.io/pypi/v/wb-mcp-server.svg)](https://pypi.org/project/wb-mcp-server/)
 [![Transport](https://img.shields.io/badge/transport-stdio%20%7C%20SSE-lightgrey.svg)](#how-it-works)
 
@@ -34,14 +34,14 @@ You: Which warehouses currently have an intake coefficient of 0 or 1?
 You: Reply to every new 5-star review with a thank-you note.
 ```
 
-![WB MCP Server dashboard](docs/img/dashboard.png)
+![WB MCP Server dashboard](https://raw.githubusercontent.com/DeviceIngineering/wb-mcp-server/main/docs/img/dashboard.png)
 
 ---
 
 ## What it can do
 
 202 tools, grouped by Wildberries Seller API area.
-The full numbered list with a description of each one is in **[docs/tools.md](docs/tools.md)**.
+The full numbered list with a description of each one is in **[docs/tools.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/tools.md)**.
 
 | Area | Tools | What it covers |
 |---|---:|---|
@@ -194,19 +194,19 @@ and variants with and without an auth token.
 
 | Client | SSE directly | Guide |
 |---|---|---|
-| Claude Code | yes | [docs/claude-code.md](docs/claude-code.md) |
-| Claude Desktop | no → `mcp-remote` bridge or local stdio | [docs/claude-desktop.md](docs/claude-desktop.md) |
-| Cursor | yes | [docs/cursor.md](docs/cursor.md) |
-| Windsurf | yes | [docs/windsurf.md](docs/windsurf.md) |
-| VS Code (GitHub Copilot) | yes | [docs/vscode-copilot.md](docs/vscode-copilot.md) |
-| Cline | yes | [docs/cline.md](docs/cline.md) |
-| Continue.dev | yes | [docs/continue.md](docs/continue.md) |
-| Zed | by URL; SSE support is not officially stated | [docs/zed.md](docs/zed.md) |
-| JetBrains AI Assistant | yes (SSE as legacy) | [docs/jetbrains.md](docs/jetbrains.md) |
-| Gemini CLI | yes | [docs/gemini-cli.md](docs/gemini-cli.md) |
-| Codex CLI | no → `mcp-remote` bridge | [docs/codex.md](docs/codex.md) |
+| Claude Code | yes | [docs/install-claude-code.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-claude-code.md) |
+| Claude Desktop | no → `mcp-remote` bridge or local stdio | [docs/install-claude-desktop.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-claude-desktop.md) |
+| Cursor | yes | [docs/install-cursor.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-cursor.md) |
+| Windsurf | yes | [docs/install-windsurf.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-windsurf.md) |
+| VS Code (GitHub Copilot) | yes | [docs/install-vscode-copilot.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-vscode-copilot.md) |
+| Cline | yes | [docs/install-cline.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-cline.md) |
+| Continue.dev | yes | [docs/install-continue.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-continue.md) |
+| Zed | by URL; SSE support is not officially stated | [docs/install-zed.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-zed.md) |
+| JetBrains AI Assistant | yes (SSE as legacy) | [docs/install-jetbrains.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-jetbrains.md) |
+| Gemini CLI | yes | [docs/install-gemini-cli.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-gemini-cli.md) |
+| Codex CLI | no → `mcp-remote` bridge | [docs/install-codex.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/install-codex.md) |
 
-Overview and compatibility table: [docs/README.md](docs/README.md).
+Overview and compatibility table: [docs/README.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/docs/README.md).
 
 Where a client has a command that configures the connection by itself, the guide starts with
 that command and treats editing JSON as the second option. The shortest setup of all —
@@ -258,7 +258,7 @@ There are ways to watch for it:
 
 The key sits next to the encrypted data, so the encryption protects against an accidental
 leak of the single `shops.json` file (a backup, a copy-paste) but not against anyone who
-gets access to the whole volume. Move the data as a whole volume — see [DEPLOY.md](DEPLOY.md).
+gets access to the whole volume. Move the data as a whole volume — see [DEPLOY.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/DEPLOY.md).
 
 **MCP authorization.** The `MCP_AUTH_TOKEN` variable in `.env`:
 
@@ -303,7 +303,7 @@ A summary of all tool calls (`stats.get_summary()`):
 
 ### Stores — `/shops`
 
-![The stores page](docs/img/shops.png)
+![The stores page](https://raw.githubusercontent.com/DeviceIngineering/wb-mcp-server/main/docs/img/shops.png)
 
 Accounts are added and removed right in the browser, with no file editing and no container
 restart. Each store has a **Проверить** ("Test") button: it makes one cheap real request to WB
@@ -316,7 +316,7 @@ deleted, so a new token takes effect immediately.
 
 ### Diagnostics — `/diagnostics`
 
-![The diagnostics page](docs/img/diagnostics.png)
+![The diagnostics page](https://raw.githubusercontent.com/DeviceIngineering/wb-mcp-server/main/docs/img/diagnostics.png)
 
 *(the screenshot shows a demo store with a made-up token: WB answers `401` to every ping and
 every probe, so the whole page is red. That is what a failed check looks like — the server
@@ -499,7 +499,7 @@ wb-mcp-server/
 ### Deployment
 
 Moving the server to a dedicated machine, migrating stores, setting up autostart —
-see **[DEPLOY.md](DEPLOY.md)** (in Russian).
+see **[DEPLOY.md](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/DEPLOY.md)** (in Russian).
 
 ## The same server for Ozon
 
@@ -537,7 +537,7 @@ Issues and pull requests are welcome and do get reviewed.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/DeviceIngineering/wb-mcp-server/blob/main/LICENSE).
 
 ## MCP Registry
 

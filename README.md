@@ -186,17 +186,17 @@ DATA_DIR=./data PORT=8001 python -m wb_mcp.app
 
 | Клиент | SSE напрямую | Инструкция |
 |---|---|---|
-| Claude Code | да | [docs/claude-code.md](docs/claude-code.md) |
-| Claude Desktop | нет → мост `mcp-remote` или локальный stdio | [docs/claude-desktop.md](docs/claude-desktop.md) |
-| Cursor | да | [docs/cursor.md](docs/cursor.md) |
-| Windsurf | да | [docs/windsurf.md](docs/windsurf.md) |
-| VS Code (GitHub Copilot) | да | [docs/vscode-copilot.md](docs/vscode-copilot.md) |
-| Cline | да | [docs/cline.md](docs/cline.md) |
-| Continue.dev | да | [docs/continue.md](docs/continue.md) |
-| Zed | по URL; поддержка SSE официально не заявлена | [docs/zed.md](docs/zed.md) |
-| JetBrains AI Assistant | да (SSE как legacy) | [docs/jetbrains.md](docs/jetbrains.md) |
-| Gemini CLI | да | [docs/gemini-cli.md](docs/gemini-cli.md) |
-| Codex CLI | нет → мост `mcp-remote` | [docs/codex.md](docs/codex.md) |
+| Claude Code | да | [docs/install-claude-code.md](docs/install-claude-code.md) |
+| Claude Desktop | нет → мост `mcp-remote` или локальный stdio | [docs/install-claude-desktop.md](docs/install-claude-desktop.md) |
+| Cursor | да | [docs/install-cursor.md](docs/install-cursor.md) |
+| Windsurf | да | [docs/install-windsurf.md](docs/install-windsurf.md) |
+| VS Code (GitHub Copilot) | да | [docs/install-vscode-copilot.md](docs/install-vscode-copilot.md) |
+| Cline | да | [docs/install-cline.md](docs/install-cline.md) |
+| Continue.dev | да | [docs/install-continue.md](docs/install-continue.md) |
+| Zed | по URL; поддержка SSE официально не заявлена | [docs/install-zed.md](docs/install-zed.md) |
+| JetBrains AI Assistant | да (SSE как legacy) | [docs/install-jetbrains.md](docs/install-jetbrains.md) |
+| Gemini CLI | да | [docs/install-gemini-cli.md](docs/install-gemini-cli.md) |
+| Codex CLI | нет → мост `mcp-remote` | [docs/install-codex.md](docs/install-codex.md) |
 
 Общий обзор и таблица совместимости — [docs/README.md](docs/README.md).
 
