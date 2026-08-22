@@ -11,7 +11,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![MCP tools](https://img.shields.io/badge/MCP%20tools-202-orange.svg)](docs/tools.md)
-[![Transport](https://img.shields.io/badge/transport-SSE-lightgrey.svg)](#工作原理)
+[![PyPI](https://img.shields.io/pypi/v/wb-mcp-server.svg)](https://pypi.org/project/wb-mcp-server/)
+[![Transport](https://img.shields.io/badge/transport-stdio%20%7C%20SSE-lightgrey.svg)](#工作原理)
 
 **在与 AI 助手的对话中管理你的 Wildberries 店铺。**
 202 个覆盖 Wildberries Seller API 的工具——商品卡片、价格、广告、发货、评价、财务、
@@ -75,6 +76,45 @@
 
 ## 快速上手
 
+### 方式一：一条命令，无需 Docker
+
+服务器使用 stdio 通信，Claude Desktop、Cursor、VS Code 等 MCP 客户端都以这种方式接入。
+无需构建：
+
+```bash
+uvx wb-mcp-server
+```
+
+或者用 pip：
+
+```bash
+pip install wb-mcp-server
+wb-mcp
+```
+
+客户端配置（以 `claude_desktop_config.json` 为例）：
+
+```json
+{
+  "mcpServers": {
+    "wildberries": {
+      "command": "uvx",
+      "args": ["wb-mcp-server"],
+      "env": {
+        "WB_API_TOKEN": "你的 Wildberries API 令牌",
+        "DATA_DIR": "~/.wb-mcp"
+      }
+    }
+  }
+}
+```
+
+`DATA_DIR` 请指向任意可写目录，用于存放店铺、令牌和统计数据。默认值 `/data` 是
+Docker 内部使用的路径。
+
+### 方式二：Docker，带网页控制台
+
+需要控制台、WB API 自诊断和在浏览器里管理店铺时选这种方式。
 需要 Docker（Docker Desktop 或 OrbStack）和一个 Wildberries Seller API 令牌。
 
 ```bash
@@ -371,13 +411,15 @@ docker compose up -d
 - `/ping` —— 每台主机 30 秒内 3 次请求（后台自诊断已考虑这一点）。
 - **任何 4XX 响应都会按 10 次请求计入配额**（该规则自 2026-06-04 起生效）。
   循环里带一个错参数，配额就用光了。
-- `reportDetailByPeriod` 将于 2026-07-15 下线；服务器已改用 finance-api，
-  并保留了回退到旧端点的逻辑。
+- `reportDetailByPeriod` **已于 2026-07-15 被 Wildberries 下线**。服务器改用 finance-api，
+  回退到旧端点的逻辑也已删除——那个端点本来就已经不可用了。销售实现报表需要 token 中带
+  **「财务」** 权限类别；如果没有，会直接给出明确的错误提示，说明需要重新签发什么，
+  而不是一个看不懂的拒绝。
 - FBW 入库计划无法通过 API 创建，只能在卖家后台操作。`wb_fbw_*` 系列工具仅供查询。
 - WB 令牌有效期 180 天。剩余天数可通过 `wb_token_info` 和 `/diagnostics` 页面查看。
 - WB 返回 `429` 表示触发限流，不是故障。过一分钟重试即可。
 
-以上内容依据 dev.wildberries.ru 官方文档核对，截至 2026 年 6 月。
+以上内容依据 dev.wildberries.ru 官方文档核对，截至 2026 年 8 月。
 
 ## 技术参考
 

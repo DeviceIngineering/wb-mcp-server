@@ -435,15 +435,17 @@ the diagnostics log.
 - `/ping` — 3 requests per 30 seconds per host (the background diagnostics accounts for this).
 - **Any 4XX response counts as 10 requests** against the limit (a rule in force since
   2026-06-04). One wrong parameter inside a loop and you are rate-limited.
-- `reportDetailByPeriod` is being removed on 2026-07-15; the server already calls
-  finance-api with a fallback to the old endpoint.
+- `reportDetailByPeriod` **was removed by Wildberries on 2026-07-15**. The server calls
+  finance-api; the fallback to the old endpoint is gone, since it is dead anyway. The
+  realization report needs the **Finance** category in the token — without it you get a
+  clear error telling you what to reissue, not an opaque refusal.
 - FBW supplies cannot be created through the API — only in the seller portal.
   The `wb_fbw_*` tools are informational.
 - A WB token lives for 180 days. `wb_token_info` and the `/diagnostics` page show
   the remaining time.
 - A `429` from WB means a rate limit, not a failure. Retry in a minute.
 
-Verified against the dev.wildberries.ru documentation as of June 2026.
+Verified against the dev.wildberries.ru documentation August 2026.
 
 ## Technical reference
 

@@ -679,7 +679,10 @@ class WBClient:
     async def stats_report_detail(self, date_from: str, date_to: str, limit: int = 100000, rrd_id: int = 0) -> Any:
         """GET /api/v5/supplier/reportDetailByPeriod — детальный отчёт по реализации.
 
-        ⚠️ DEPRECATED, удаление 15.07.2026. Замена — finance_sales_report_detailed().
+        ⛔ УДАЛЁН Wildberries 15.07.2026 — метод оставлен только на случай, если у
+        кого-то ещё отвечает старый контур. Ничем в сервере не вызывается.
+        Рабочая замена — finance_sales_report_detailed() (finance-api, нужна
+        категория «Финансы» в токене).
         """
         return await self._get(self._statistics, "/api/v5/supplier/reportDetailByPeriod", {
             "dateFrom": date_from, "dateTo": date_to, "limit": limit, "rrdid": rrd_id,
@@ -1309,8 +1312,7 @@ class WBClient:
     async def finance_realization_report(
         self, date_from: str, date_to: str, limit: int = 100000, rrd_id: int = 0,
     ) -> Any:
-        """Отчёт о реализации: новый finance-api, при недоступности (нет категории
-        «Финансы» в токене) — fallback на старый reportDetailByPeriod (живёт до 15.07.2026).
+        """Отчёт о реализации через finance-api.
 
         Содержит все финансовые данные:
         - retail_price, retail_amount — цена и сумма продажи
@@ -1320,13 +1322,22 @@ class WBClient:
         - penalty — штрафы
         - additional_payment — доплаты
         - ppvz_for_pay — к оплате продавцу (чистый доход)
+
+        Fallback на старый reportDetailByPeriod убран: WB удалил этот эндпоинт
+        15.07.2026, и переход на него давал не «данные постарее», а невнятную
+        ошибку вместо понятной причины отказа. Теперь при 401/403 сразу
+        говорим, чего не хватает — категории «Финансы» в токене.
         """
         try:
             return await self.finance_sales_report_detailed(date_from, date_to, limit, rrd_id)
         except httpx.HTTPStatusError as e:
-            if e.response.status_code in (401, 403, 404):
-                # Токен без категории «Финансы» — старый эндпоинт (до 15.07.2026)
-                return await self.stats_report_detail(date_from, date_to, limit, rrd_id)
+            if e.response.status_code in (401, 403):
+                raise RuntimeError(
+                    "Отчёт о реализации недоступен: у токена нет категории «Финансы». "
+                    "Выпустите новый токен в ЛК WB (Настройки → Доступ к API), отметив "
+                    "категорию «Финансы». Старый эндпоинт reportDetailByPeriod, который "
+                    "раньше служил запасным путём, удалён Wildberries 15.07.2026."
+                ) from e
             raise
 
     # ═══════════════════════════════════════════════════════════
