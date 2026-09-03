@@ -22,6 +22,11 @@ v2.3.1 — default в JSON-схемах limit приведён к фактиче
 v2.4.0 — формирование ответа (wb_mcp/shaping.py): пресеты view=compact|full,
          сигнал усечения, предохранитель размера, фильтр справочника комиссий.
          Корпус живых ответов: 770 506 → 74 947 токенов.
+
+v2.5.0 — профили инструментов (wb_mcp/toolsets.py): WB_TOOLSETS оставляет
+         нужные разделы каталога; core (магазины, диагностика, деградации,
+         токен) включён всегда. 202 инструмента = 18 011 токенов, pricing+ads
+         = 4 925.
 """
 
 import json
@@ -35,12 +40,12 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
-from wb_mcp import shaping
+from wb_mcp import shaping, toolsets
 from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.4.0")
+app = Server("wb-mcp-server", version="2.5.0")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -1624,9 +1629,28 @@ def _visible_tools() -> list[Tool]:
     return visible
 
 
+def _enabled_tools(tools: list[Tool]) -> list[Tool]:
+    """Отсечь профили, выключенные через WB_TOOLSETS, и сказать об этом в описании.
+
+    Инструмент, которого модель не видит, превращается в ответ «такой возможности
+    нет». Поэтому список выключенного попадает в описание wb_list_shops — модель
+    может назвать причину, а не выдумать ограничение.
+    """
+    note = toolsets.availability_note()
+    if not note:
+        return tools
+    result = []
+    for t in tools:
+        if not toolsets.is_enabled(t.name):
+            continue
+        description = t.description + note if t.name == "wb_list_shops" else t.description
+        result.append(Tool(name=t.name, description=description, inputSchema=t.inputSchema))
+    return result
+
+
 @app.list_tools()
 async def list_tools() -> list[Tool]:
-    return _visible_tools()
+    return _enabled_tools(_visible_tools())
 
 
 @app.call_tool()
@@ -1652,6 +1676,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 
 async def _call_tool_impl(name: str, arguments: dict) -> list[TextContent]:
+    # Профиль проверяется первым: иначе выключенный инструмент упрётся в ошибку
+    # про магазин или токен, и причина отказа останется невидимой.
+    if not toolsets.is_enabled(name):
+        return [TextContent(type="text", text=toolsets.unavailable_message(name))]
+
     if name in NO_CLIENT_DISPATCH:
         return _shaped(name, arguments, await NO_CLIENT_DISPATCH[name](arguments))
 
