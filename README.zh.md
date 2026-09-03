@@ -1,7 +1,7 @@
 <div align="center">
 
-[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8B949E?style=for-the-badge)](README.md)
-[![English](https://img.shields.io/badge/English-8B949E?style=for-the-badge)](README.en.md)
+[![Русский](https://img.shields.io/badge/%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9-8B949E?style=for-the-badge)](README.ru.md)
+[![English](https://img.shields.io/badge/English-8B949E?style=for-the-badge)](README.md)
 ![中文](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-0A66C2?style=for-the-badge)
 
 </div>
@@ -345,6 +345,73 @@ docker compose up -d
 
 因此可以把它接入 Uptime Kuma、Zabbix 或任何其他监控系统，
 在助手报错之前就知道令牌已经失效。
+
+## 上下文预算
+
+消耗 token 的有两处：每次会话加载一次的工具定义，以及每次调用都要付费的工具返回值。
+两者都在真实卖家账号上实测过，而不是估算——`scripts/collect_corpus.py` 采集只读工具的
+返回样本（个人信息在写入磁盘前即被脱敏，样本目录不进仓库），`scripts/measure_corpus.py`
+计算它们的开销。
+
+**工具定义。** 单店铺配置下，202 个工具占 **17 700 tokens**，此前为 27 460：描述压缩成
+一句话，只有一个店铺时 `shop_id` 不写进 schema（服务器自动补全），空字段不再序列化。
+
+**返回值。** 真正的问题出在少数几个超大响应上：
+
+| 工具 | 优化前 | 优化后 |
+|---|---:|---:|
+| `wb_tariffs_commission` — 7 408 个类目的完整佣金表 | 621 802 | 23 023 |
+| `wb_cards_list` — 78 % 的体积是图片链接和商品描述 | 73 827 | 3 232 |
+| `wb_finance_report` — 每行 90 个字段 | 23 540 | 7 156 |
+| **27 条真实响应的样本集** | **770 506** | **74 947** |
+
+服务器为此做了四件事：
+
+- **`view: compact | full`。** 重的工具默认只返回调用它时真正需要的字段，`view="full"`
+  返回原始响应；被隐藏了哪些字段会写在回复里，模型知道还能要什么。
+- **截断提示。** 当返回条数正好等于 `limit`，回复会附带一句「数据很可能不完整」。否则
+  模型会拿一个切片当成全部商品来下结论。
+- **体积保护。** 超过客户端输出上限（Claude Code 默认 `MAX_MCP_OUTPUT_TOKENS` = 25 000）
+  的响应在服务端裁剪，并说明保留了多少条、总共多少条，而不是到达客户端后被静默截断。
+- **API 没有的过滤参数，服务端补上。** WB 只能整份返回佣金表，这里用 `subject` 参数筛选。
+
+提示以独立的 content 块返回，而不是塞进 JSON 里：WB 有一半接口顶层就是数组，包一层会
+破坏所有取数路径。
+
+**工具档案。** 没有 tool search 的客户端每次请求都要为整个工具目录付费。`WB_TOOLSETS`
+只保留你用得到的档案，划分依据是实际工作场景而不是 WB 文档章节——促销审计同时需要促销、
+价格和价格隔离区：
+
+| `WB_TOOLSETS` | 工具数 | tokens |
+|---|---:|---:|
+| 留空（默认） | 202 | 18 011 |
+| `pricing,ads` | 49 | 4 925 |
+| `orders` | 71 | 5 801 |
+
+`core` 档案（店铺列表、自诊断、能力退化、token 信息）始终开启：出问题的时候恰恰最需要
+诊断。被关闭的档案会写进 `wb_list_shops` 的描述，调用被关闭的工具会回答它属于哪个档案，
+这样助手说得出原因，而不是回一句「做不到」。
+
+Claude Code 不需要这些：它默认开启 tool search，按需加载 schema。Cursor、Cline、Continue
+和 Claude Desktop 会整份拉取 `tools/list`——工具档案是给它们准备的。
+
+## 设计取舍
+
+- **202 个细分工具，而不是几个万能接口。** 合并成 `action` 式的通用接口能省定义 token，
+  但会改变故障的性质：从「没有这个工具」变成「参数用错但真的执行了」，而这些工具里有改价
+  和投放广告。
+- **用字典分发，不用 if 链。** 工具名到 handler 的映射由三个字典维护，并有测试保证每个
+  工具都有 handler、没有孤立 handler。202 个工具的 if 链会悄无声息地腐坏。
+- **服务器自我诊断。** `wb_diagnostics` ping 所有 WB 主机并按 API 分类各发一个轻量真实
+  请求，`wb_degradations` 报告哪些工具以前能用、现在稳定失败。电商平台改接口从不打招呼，
+  「是我的 token 过期了还是 WB 换了地址」必须一次调用就能回答。
+- **重工具默认 `compact`。** 样本集显示被隐藏的是图片链接、促销历史和仓库排班表，而不是
+  做决策要用的数据；而且回复里写明了隐藏了什么。
+- **单店铺时 `shop_id` 从 schema 中消失**，出现第二个店铺时立刻回来。
+- **`mcp<2` 是有意锁定的**：2.0 的 low-level API 去掉了本服务器依赖的装饰器写法，迁移
+  是另一件事，锁定的原因写在锁定的地方。
+- **凭证静态加密**（Fernet，密钥在数据卷里）、界面上打码；样本采集器在写文件前就脱敏，
+  因为订单和聊天数据里有买家姓名、电话和地址。
 
 ## 工作原理
 
