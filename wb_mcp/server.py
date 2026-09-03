@@ -18,6 +18,10 @@ v2.3.0 — оптимизация контекста: компактный JSON 
 
 v2.3.1 — default в JSON-схемах limit приведён к фактическому дефолту
          handler'ов, добавлена сверка тестом.
+
+v2.4.0 — формирование ответа (wb_mcp/shaping.py): пресеты view=compact|full,
+         сигнал усечения, предохранитель размера, фильтр справочника комиссий.
+         Корпус живых ответов: 770 506 → 74 947 токенов.
 """
 
 import json
@@ -31,11 +35,12 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
+from wb_mcp import shaping
 from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.3.1")
+app = Server("wb-mcp-server", version="2.4.0")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -82,6 +87,18 @@ def get_mcp_app() -> Server:
 
 def _json(data: Any) -> list[TextContent]:
     return [TextContent(type="text", text=json.dumps(data, ensure_ascii=False, separators=(",", ":"), default=str))]
+
+
+def _shaped(name: str, arguments: dict, data: Any) -> list[TextContent]:
+    """Ответ инструмента: данные плюс заметки о пресете, усечении и размере.
+
+    Заметки идут отдельными блоками, а не полем внутри JSON: у половины ручек WB
+    верхний уровень ответа — массив, и обёртка сломала бы все привычные пути.
+    """
+    data, notes = shaping.shape(name, arguments, data)
+    blocks = _json(data)
+    blocks.extend(TextContent(type="text", text=note) for note in notes)
+    return blocks
 
 
 # Callback для записи статистики
@@ -692,7 +709,10 @@ TOOLS = [
           "[P0] Reverse logistics tariffs for returns, a hidden cost at high return rates (тарифы возвратов).",
           {"date": {"type": "string", "description": "YYYY-MM-DD"}}),
     _tool("wb_tariffs_commission",
-          "[P0] WB commissions by category for FBO, FBS, DBS; input for unit economics (комиссии)."),
+          "[P0] WB commissions by category for FBO, FBS, DBS; input for unit economics (комиссии). "
+          "Pass subject to filter: the full reference is 7 400 categories.",
+          {"subject": {"type": "string",
+                       "description": "category name substring, case-insensitive (название категории)"}}),
     _tool("wb_fbw_transit_tariffs",
           "Transit directions for FBW supplies to regions (транзитные тарифы)."),
 
@@ -1198,7 +1218,21 @@ async def _h_jam_subscription(c, a): return await c.jam_subscription()
 async def _h_tariffs_box(c, a): return await c.tariffs_box(date=a.get("date"))
 async def _h_tariffs_pallet(c, a): return await c.tariffs_pallet(date=a.get("date"))
 async def _h_tariffs_return(c, a): return await c.tariffs_return(date=a.get("date"))
-async def _h_tariffs_commission(c, a): return await c.tariffs_commission()
+async def _h_tariffs_commission(c, a):
+    """Комиссии по категориям. WB отдаёт весь справочник — 7 408 строк, 880 000
+    токенов, в 35 раз больше потолка вывода клиента. Поэтому фильтр по названию
+    категории применяется на сервере: без него инструмент нечитаем."""
+    data = await c.tariffs_commission()
+    query = (a.get("subject") or "").strip().lower()
+    if not query:
+        return data
+    rows = data.get("report") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return data
+    picked = [r for r in rows
+              if query in str(r.get("subjectName", "")).lower()
+              or query in str(r.get("parentName", "")).lower()]
+    return {**data, "report": picked, "filteredBy": a["subject"], "totalCategories": len(rows)}
 async def _h_fbw_transit_tariffs(c, a): return await c.fbw_transit_tariffs()
 
 # ── Платное хранение ──
@@ -1619,7 +1653,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def _call_tool_impl(name: str, arguments: dict) -> list[TextContent]:
     if name in NO_CLIENT_DISPATCH:
-        return _json(await NO_CLIENT_DISPATCH[name](arguments))
+        return _shaped(name, arguments, await NO_CLIENT_DISPATCH[name](arguments))
 
     shop_id = arguments.get("shop_id", "")
     if not shop_id:
@@ -1633,12 +1667,18 @@ async def _call_tool_impl(name: str, arguments: dict) -> list[TextContent]:
     c = _get_client(shop_id)
 
     if name in CLIENT_DISPATCH:
-        return _json(await CLIENT_DISPATCH[name](c, arguments))
+        return _shaped(name, arguments, await CLIENT_DISPATCH[name](c, arguments))
 
     if name in SHOP_DISPATCH:
-        return _json(await SHOP_DISPATCH[name](c, arguments, shop_id))
+        return _shaped(name, arguments, await SHOP_DISPATCH[name](c, arguments, shop_id))
 
     return [TextContent(type="text", text=f"Неизвестный инструмент: {name}")]
+
+
+# Инструментам с compact-пресетом добавляется переключатель view.
+for _tool_with_view in TOOLS:
+    if _tool_with_view.name in shaping.VIEWS:
+        _tool_with_view.inputSchema.setdefault("properties", {})["view"] = dict(shaping.VIEW_PROP)
 
 
 # ─── Точка входа ──────────────────────────────────────────
