@@ -74,3 +74,27 @@ def test_json_output_is_compact():
     text = _json({"a": [1, 2], "b": "тест"})[0].text
     assert "\n" not in text and ", " not in text, text
     assert "\\u" not in text, "кириллица не должна экранироваться"
+
+
+def test_limit_defaults_match_handlers():
+    """default в схеме = фактический дефолт в handler.
+
+    Расхождение опаснее лишних токенов: модель читает схему, считает, что
+    получила 1000 записей, и делает вывод по первым 100.
+    """
+    import inspect
+    import re
+    from wb_mcp.server import TOOLS, CLIENT_DISPATCH, NO_CLIENT_DISPATCH, SHOP_DISPATCH
+
+    handlers = {**CLIENT_DISPATCH, **NO_CLIENT_DISPATCH, **SHOP_DISPATCH}
+    mismatched = []
+    for tool in TOOLS:
+        prop = (tool.inputSchema.get("properties") or {}).get("limit")
+        handler = handlers.get(tool.name)
+        if not isinstance(prop, dict) or "default" not in prop or handler is None:
+            continue
+        found = re.search(r'get\("limit",\s*(\d+)\)', inspect.getsource(handler))
+        if found and int(found.group(1)) != prop["default"]:
+            mismatched.append((tool.name, prop["default"], int(found.group(1))))
+
+    assert not mismatched, f"схема обещает не тот лимит (tool, схема, код): {mismatched}"

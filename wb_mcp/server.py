@@ -15,6 +15,9 @@ v2.2.0 — диспетчеризация инструментов через с
 v2.3.0 — оптимизация контекста: компактный JSON в ответах, сжатые описания
          инструментов, shop_id скрывается при единственном магазине
          (определения: 27 460 → 17 709 токенов).
+
+v2.3.1 — default в JSON-схемах limit приведён к фактическому дефолту
+         handler'ов, добавлена сверка тестом.
 """
 
 import json
@@ -32,7 +35,7 @@ from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.3.0")
+app = Server("wb-mcp-server", version="2.3.1")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -208,7 +211,7 @@ TOOLS = [
     # === P0: ЦЕНЫ ===
     _tool("wb_prices_list",
           "[P0] Current prices and discounts for all goods (цены, скидки, маржинальность).",
-          {"limit": {"type": "integer", "default": 1000},
+          {"limit": {"type": "integer", "default": 100},
            "offset": {"type": "integer", "default": 0},
            "filter_nm_id": {"type": "integer", "description": "nmID filter"}}),
     _tool("wb_prices_set",
@@ -217,7 +220,7 @@ TOOLS = [
           ["data"]),
     _tool("wb_prices_quarantine",
           "[P0] Goods in price quarantine: cut over 3x, new price NOT applied (карантин цен). Check regularly.",
-          {"limit": {"type": "integer", "default": 1000}, "offset": {"type": "integer", "default": 0}}),
+          {"limit": {"type": "integer", "default": 100}, "offset": {"type": "integer", "default": 0}}),
     _tool("wb_prices_club_discount",
           "Set WB Club discounts, max 1000 goods per request (скидка WB Клуба).",
           {"data": {"type": "array", "items": {"type": "object"}, "description": "[{nmID, clubDiscount}, ...]"}},
@@ -243,7 +246,7 @@ TOOLS = [
            "end": {"type": "string", "description": "RFC3339"},
            "all_promo": {"type": "boolean", "default": False, "description": "false = eligible only, true = all"},
            "promo_type": {"type": "string", "enum": ["auto", "regular"], "description": "type filter: auto | regular"},
-           "limit": {"type": "integer", "default": 1000, "description": "1–1000"},
+           "limit": {"type": "integer", "default": 100, "description": "1-1000"},
            "offset": {"type": "integer", "default": 0}},
           ["start", "end"]),
     _tool("wb_promotions_auto",
@@ -266,7 +269,7 @@ TOOLS = [
           "Goods eligible for a promotion. in_action: true = participating. Returns price/planPrice, discount/planDiscount (товары акции).",
           {"promotion_id": {"type": "integer"},
            "in_action": {"type": "boolean", "description": "participation filter"},
-           "limit": {"type": "integer", "default": 1000, "description": "1–1000"},
+           "limit": {"type": "integer", "default": 100, "description": "1-1000"},
            "offset": {"type": "integer", "default": 0}},
           ["promotion_id"]),
     _tool("wb_promotions_add_products",
@@ -284,7 +287,7 @@ TOOLS = [
     _tool("wb_finance_report",
           "[P0] Realization report for a period: commissions, logistics, storage, penalties, payout (отчёт о реализации, прибыль). Use wb_finance_reports_list + wb_finance_report_detailed for detail.",
           {"date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"},
-           "limit": {"type": "integer", "default": 100000}, "rrd_id": {"type": "integer", "default": 0}},
+           "limit": {"type": "integer", "default": 500}, "rrd_id": {"type": "integer", "default": 0}},
           ["date_from", "date_to"]),
     _tool("wb_finance_reports_list",
           "[P0] Realization reports list, finance-api v1, data from 2025-01-01. Then call wb_finance_report_detailed (список отчётов).",
@@ -294,7 +297,7 @@ TOOLS = [
           ["date_from", "date_to"]),
     _tool("wb_finance_report_detailed",
           "[P0] Realization report detail by reportId: commissions, logistics, storage, penalties, payout. Paginate via rrd_id (детализация отчёта).",
-          {"report_id": {"type": "string"}, "limit": {"type": "integer", "default": 100000},
+          {"report_id": {"type": "string"}, "limit": {"type": "integer", "default": 500},
            "rrd_id": {"type": "integer", "default": 0}},
           ["report_id"]),
     _tool("wb_finance_acquiring_list",
@@ -306,7 +309,7 @@ TOOLS = [
     _tool("wb_finance_acquiring_detailed",
           "Acquiring cost detail for a period (эквайринг, детализация).",
           {"date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"},
-           "limit": {"type": "integer", "default": 100000}, "rrd_id": {"type": "integer", "default": 0}},
+           "limit": {"type": "integer", "default": 500}, "rrd_id": {"type": "integer", "default": 0}},
           ["date_from", "date_to"]),
 
     # === P0: РЕКЛАМА (ДРР) ===
@@ -449,7 +452,7 @@ TOOLS = [
           "Archived FBS orders for a period: finished or cancelled (архив заказов).",
           {"date_from": {"type": "string", "description": "RFC3339"},
            "date_to": {"type": "string", "description": "RFC3339"},
-           "limit": {"type": "integer", "default": 1000}},
+           "limit": {"type": "integer", "default": 100}},
           ["date_from"]),
     _tool("wb_supply_order_ids",
           "Assembly task IDs inside an FBS supply (задания в поставке).",
@@ -763,7 +766,7 @@ TOOLS = [
           "All orders for a period (заказы за период).",
           {"date_from": {"type": "string", "description": "RFC3339 (2024-01-01T00:00:00Z)"},
            "date_to": {"type": "string", "description": "RFC3339"},
-           "limit": {"type": "integer", "default": 1000}},
+           "limit": {"type": "integer", "default": 100}},
           ["date_from"]),
     _tool("wb_orders_status",
           "Statuses of specific orders (статусы заказов).",
@@ -814,9 +817,9 @@ TOOLS = [
           {"date_from": {"type": "string"}, "flag": {"type": "integer", "default": 0, "description": "1 = updated only"}},
           ["date_from"]),
     _tool("wb_stats_stocks",
-          "[P0] Current stock across ALL WB warehouses, limit 1000. nm_ids filters by article. Stock without sales means overpaid storage (остатки).",
+          "[P0] Current stock across ALL WB warehouses (API cap 1000, default 100). nm_ids filters by article. Stock without sales means overpaid storage (остатки).",
           {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "offer_id filter"},
-           "limit": {"type": "integer", "default": 1000}}),
+           "limit": {"type": "integer", "default": 100}}),
 
     # === P1: ОТЗЫВЫ И ВОПРОСЫ ===
     _tool("wb_feedbacks_list",
@@ -904,7 +907,7 @@ TOOLS = [
           ["supply_id"]),
     _tool("wb_fbw_supply_goods",
           "Goods inside an FBW supply (товары в поставке).",
-          {"supply_id": {"type": "integer"}, "limit": {"type": "integer", "default": 1000}},
+          {"supply_id": {"type": "integer"}, "limit": {"type": "integer", "default": 100}},
           ["supply_id"]),
     _tool("wb_fbw_acceptance_options",
           "Warehouses and packaging types available for an FBW supply, by barcodes (варианты приёмки).",
