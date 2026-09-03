@@ -2,16 +2,19 @@
 
 Разделы: Магазины, Товары, Цены, Заказы, Финансы, Реклама, Аналитика,
          Отзывы, Вопросы, Возвраты, Тарифы, Обращения.
-Поддержка нескольких магазинов через параметр shop_id.
+Поддержка нескольких магазинов через параметр shop_id: он передаётся явно,
+а при единственном магазине подставляется сервером и в схемы не попадает.
 
-Приоритеты инструментов (по критичности для бизнеса):
-  P0 — прямые финансовые потери (блокировки, убыточные цены/реклама)
-  P1 — операционные метрики (заказы, продажи, остатки, отзывы)
-  P2 — справочные данные (склады, лимиты, категории)
-  P3 — администрирование (пользователи, доступы)
+В описаниях помечены только инструменты P0 — те, где ошибка означает прямые
+финансовые потери (блокировки, убыточные цены и реклама). Остальные градации
+(P1-P3) убраны из описаний: они стоили токенов контекста, не влияя на выбор.
 
 v2.2.0 — диспетчеризация инструментов через словари NO_CLIENT_DISPATCH /
          CLIENT_DISPATCH вместо if/elif цепочки + 39 новых инструментов.
+
+v2.3.0 — оптимизация контекста: компактный JSON в ответах, сжатые описания
+         инструментов, shop_id скрывается при единственном магазине
+         (определения: 27 460 → 17 709 токенов).
 """
 
 import json
@@ -29,7 +32,7 @@ from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.2.2")
+app = Server("wb-mcp-server", version="2.3.0")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -93,14 +96,19 @@ SHOP_ID_PROP = {"type": "string"}
 
 
 def _tool(name: str, description: str, properties: dict | None = None, required: list | None = None) -> Tool:
-    """Создать Tool с обязательным shop_id."""
+    """Создать Tool с необязательным shop_id.
+
+    shop_id не в required: при единственном магазине сервер подставляет его сам
+    (см. _call_tool_impl), а при нескольких — возвращает список доступных.
+    Пустой required в схему не пишется — это ~7 токенов на инструмент.
+    """
     props = {"shop_id": SHOP_ID_PROP}
     if properties:
         props.update(properties)
-    req = ["shop_id"]
+    schema: dict = {"type": "object", "properties": props}
     if required:
-        req.extend(required)
-    return Tool(name=name, description=description, inputSchema={"type": "object", "properties": props, "required": req})
+        schema["required"] = list(required)
+    return Tool(name=name, description=description, inputSchema=schema)
 
 
 # ─── Определение инструментов ─────────────────────────────
@@ -110,7 +118,7 @@ TOOLS = [
     Tool(
         name="wb_list_shops",
         description="Registered WB shops (магазины): shop_id + name. Use shop_id in all other tools.",
-        inputSchema={"type": "object", "properties": {}, "required": []},
+        inputSchema={"type": "object", "properties": {}},
     ),
 
     # === P0: КАРТОЧКИ И БЛОКИРОВКИ ===
@@ -119,29 +127,29 @@ TOOLS = [
     _tool("wb_cards_list",
           "List product cards (карточки товаров), cursor pagination.",
           {"limit": {"type": "integer", "default": 100},
-           "cursor": {"type": "object", "description": "Курсор пагинации (опц.)"},
-           "filter": {"type": "object", "description": "Фильтр (опц.)"}}),
+           "cursor": {"type": "object", "description": "pagination cursor"},
+           "filter": {"type": "object", "description": "filter"}}),
     _tool("wb_card_detail",
           "Card details by nmID (карточка товара).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Список nmID товаров"}},
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "nmID list"}},
           ["nm_ids"]),
     _tool("wb_cards_update",
           "Update cards: description, SEO, characteristics (обновить карточку).",
-          {"cards": {"type": "array", "items": {"type": "object"}, "description": "Массив обновлённых карточек"}},
+          {"cards": {"type": "array", "items": {"type": "object"}, "description": "updated cards"}},
           ["cards"]),
     _tool("wb_cards_move_to_trash",
           "Move cards to trash by nmID (удалить карточки).",
-          {"nm_ids": {"type": "array", "items": {"type": "number"}, "description": "Список nmID товаров для удаления"}},
+          {"nm_ids": {"type": "array", "items": {"type": "number"}, "description": "nmIDs to delete"}},
           ["nm_ids"]),
     _tool("wb_cards_recover_from_trash",
           "Restore cards from trash by nmID (восстановить карточки).",
-          {"nm_ids": {"type": "array", "items": {"type": "number"}, "description": "Список nmID товаров для восстановления"}},
+          {"nm_ids": {"type": "array", "items": {"type": "number"}, "description": "nmIDs to restore"}},
           ["nm_ids"]),
     _tool("wb_cards_limits",
           "Card create/edit limits (лимиты карточек)."),
     _tool("wb_cards_create",
           "Create new cards, async, up to 30 min to sync. Get subject characteristics via wb_subject_charcs first (создать карточки).",
-          {"cards": {"type": "array", "items": {"type": "object"}, "description": "Массив: [{subjectID, variants: [{vendorCode, title, description, brand, dimensions, characteristics, sizes}]}]"}},
+          {"cards": {"type": "array", "items": {"type": "object"}, "description": "[{subjectID, variants: [{vendorCode, title, description, brand, dimensions, characteristics, sizes}]}]"}},
           ["cards"]),
     _tool("wb_cards_trash",
           "Cards in trash (корзина).",
@@ -151,11 +159,11 @@ TOOLS = [
           {"count": {"type": "integer", "default": 1}}),
     _tool("wb_media_upload",
           "Upload photo/video to a card by URL. Warning: REPLACES all existing media (медиа, фото).",
-          {"nm_id": {"type": "integer"}, "links": {"type": "array", "items": {"type": "string"}, "description": "Ссылки на изображения (≥700x900px)"}},
+          {"nm_id": {"type": "integer"}, "links": {"type": "array", "items": {"type": "string"}, "description": "image URLs, min 700x900px"}},
           ["nm_id", "links"]),
     _tool("wb_subjects_search",
           "Search WB subjects/categories for card creation (предметы, категории).",
-          {"name": {"type": "string", "description": "Поиск по названию (опц.)"},
+          {"name": {"type": "string", "description": "search by name"},
            "limit": {"type": "integer", "default": 30}}),
     _tool("wb_subject_charcs",
           "Subject characteristics: required/optional card fields (характеристики предмета).",
@@ -164,8 +172,8 @@ TOOLS = [
     _tool("wb_directory",
           "WB reference books: colors, kinds, countries, seasons, vat, tnved (справочники).",
           {"directory": {"type": "string", "description": "colors | kinds | countries | seasons | vat | tnved"},
-           "subject_id": {"type": "integer", "description": "Для tnved (опц.)"},
-           "search": {"type": "string", "description": "Для tnved (опц.)"}},
+           "subject_id": {"type": "integer", "description": "for tnved"},
+           "search": {"type": "string", "description": "for tnved"}},
           ["directory"]),
     _tool("wb_tags",
           "Seller tags for grouping cards (ярлыки, теги)."),
@@ -195,17 +203,17 @@ TOOLS = [
           ["nm_id", "recommended_nm_ids"]),
     _tool("wb_brands_list",
           "Seller brands; subject_id filters by category (бренды).",
-          {"subject_id": {"type": "integer", "description": "Фильтр по категории (опц.)"}}),
+          {"subject_id": {"type": "integer", "description": "category filter"}}),
 
     # === P0: ЦЕНЫ ===
     _tool("wb_prices_list",
           "[P0] Current prices and discounts for all goods (цены, скидки, маржинальность).",
           {"limit": {"type": "integer", "default": 1000},
            "offset": {"type": "integer", "default": 0},
-           "filter_nm_id": {"type": "integer", "description": "Фильтр по конкретному nmID (опц.)"}}),
+           "filter_nm_id": {"type": "integer", "description": "nmID filter"}}),
     _tool("wb_prices_set",
           "[P0] Set prices and discounts. Items: {nmID, price, discount} (установить цену).",
-          {"data": {"type": "array", "items": {"type": "object"}, "description": "Массив: [{nmID, price, discount}, ...]"}},
+          {"data": {"type": "array", "items": {"type": "object"}, "description": "[{nmID, price, discount}]"}},
           ["data"]),
     _tool("wb_prices_quarantine",
           "[P0] Goods in price quarantine: cut over 3x, new price NOT applied (карантин цен). Check regularly.",
@@ -217,7 +225,7 @@ TOOLS = [
     _tool("wb_prices_upload_status",
           "Price upload status by uploadID from wb_prices_set. buffer=true for deferred uploads (статус загрузки цен).",
           {"upload_id": {"type": "integer"}, "buffer": {"type": "boolean", "default": False},
-           "details": {"type": "boolean", "default": False, "description": "true = детализация по товарам с ошибками"}},
+           "details": {"type": "boolean", "default": False, "description": "true = detail for goods with errors"}},
           ["upload_id"]),
     _tool("wb_prices_size_list",
           "Prices per size for one product (цены по размерам).",
@@ -233,8 +241,8 @@ TOOLS = [
           "[P0] WB promotions for a period. type: 'auto' = WB adds goods itself, 'regular' (акции, промо). Monitor auto ones.",
           {"start": {"type": "string", "description": "RFC3339 (2026-06-01T00:00:00Z)"},
            "end": {"type": "string", "description": "RFC3339"},
-           "all_promo": {"type": "boolean", "default": False, "description": "false = только доступные для участия, true = все"},
-           "promo_type": {"type": "string", "enum": ["auto", "regular"], "description": "Фильтр по типу: auto | regular (опц.)"},
+           "all_promo": {"type": "boolean", "default": False, "description": "false = eligible only, true = all"},
+           "promo_type": {"type": "string", "enum": ["auto", "regular"], "description": "type filter: auto | regular"},
            "limit": {"type": "integer", "default": 1000, "description": "1–1000"},
            "offset": {"type": "integer", "default": 0}},
           ["start", "end"]),
@@ -247,8 +255,8 @@ TOOLS = [
           "[P0] Participation audit: which promotions already hold my goods and the price effect (price→planPrice, % drop). For auto-promos WB hides the item list (nomenclaturesAvailable=false) — control prices via wb_prices_list/wb_prices_quarantine. Auto-throttled to 10 req/6 s (аудит акций).",
           {"start": {"type": "string", "description": "RFC3339"},
            "end": {"type": "string", "description": "RFC3339"},
-           "only_auto": {"type": "boolean", "default": False, "description": "true = только автоакции (состав недоступен); false = все акции"},
-           "max_promotions": {"type": "integer", "default": 25, "description": "Сколько акций проверить (защита от лимита)"}},
+           "only_auto": {"type": "boolean", "default": False, "description": "true = auto-promos only (items hidden); false = all"},
+           "max_promotions": {"type": "integer", "default": 25, "description": "how many promos to check, rate-limit guard"}},
           ["start", "end"]),
     _tool("wb_promotions_details",
           "Promotion details: dates, ranging/boost conditions, slots, participationPercentage, advantages, type (детали акции).",
@@ -257,7 +265,7 @@ TOOLS = [
     _tool("wb_promotions_products",
           "Goods eligible for a promotion. in_action: true = participating. Returns price/planPrice, discount/planDiscount (товары акции).",
           {"promotion_id": {"type": "integer"},
-           "in_action": {"type": "boolean", "description": "Фильтр участия (опц.)"},
+           "in_action": {"type": "boolean", "description": "participation filter"},
            "limit": {"type": "integer", "default": 1000, "description": "1–1000"},
            "offset": {"type": "integer", "default": 0}},
           ["promotion_id"]),
@@ -269,7 +277,7 @@ TOOLS = [
           ["promotion_id", "nm_ids"]),
     _tool("wb_promotion_exit",
           "[P0] Leave a promotion: restore price and discount via Prices API, WB has no exit endpoint (выйти из акции).",
-          {"data": {"type": "array", "items": {"type": "object"}, "description": "[{nmID, price, discount}, ...] — доакционные значения"}},
+          {"data": {"type": "array", "items": {"type": "object"}, "description": "[{nmID, price, discount}] pre-promo values"}},
           ["data"]),
 
     # === P0: ФИНАНСЫ И РЕАЛИЗАЦИЯ ===
@@ -306,21 +314,21 @@ TOOLS = [
     # (seacat), ставки manual/unified, кластеры вместо ключевых фраз.
     _tool("wb_advert_list",
           "[P0] Ad campaigns with settings and bids. statuses: 9=active, 11=paused, 7=finished, 4=ready, 8=cancelled, -1=deleted (реклама, кампании).",
-          {"ids": {"type": "array", "items": {"type": "integer"}, "description": "ID кампаний, ≤50 (опц.)"},
-           "statuses": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр по статусам (опц.)"},
-           "payment_type": {"type": "string", "description": "cpm | cpc (опц.)"}}),
+          {"ids": {"type": "array", "items": {"type": "integer"}, "description": "campaign ids, max 50"},
+           "statuses": {"type": "array", "items": {"type": "integer"}, "description": "status filter"},
+           "payment_type": {"type": "string", "description": "cpm | cpc"}}),
     _tool("wb_advert_count",
           "Campaign counts by type and status; use to get all campaign IDs (количество кампаний)."),
     _tool("wb_advert_create",
           "Create ad campaign (type 9 Search+Catalog, the only one since 2026). bid_type: unified | manual with placement_types (создать кампанию).",
-          {"name": {"type": "string"}, "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Артикулы, ≤50"},
+          {"name": {"type": "string"}, "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "offer_ids, max 50"},
            "bid_type": {"type": "string", "default": "unified", "description": "unified | manual"},
            "payment_type": {"type": "string", "default": "cpm", "description": "cpm | cpc"},
-           "placement_types": {"type": "array", "items": {"type": "string"}, "description": "Для manual: search, recommendations"}},
+           "placement_types": {"type": "array", "items": {"type": "string"}, "description": "for manual: search, recommendations"}},
           ["name", "nm_ids"]),
     _tool("wb_advert_stats",
           "[P0] Campaign stats: spend, views, clicks, CTR, CPC, orders, revenue + daily breakdown in days[]. Limit 3 req/min, period ≤31 d. Spend/revenue over 20% means ДРР too high (статистика рекламы).",
-          {"advert_ids": {"type": "array", "items": {"type": "integer"}, "description": "ID кампаний"},
+          {"advert_ids": {"type": "array", "items": {"type": "integer"}, "description": "campaign ids"},
            "date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"}},
           ["advert_ids", "date_from", "date_to"]),
     _tool("wb_advert_balance",
@@ -331,7 +339,7 @@ TOOLS = [
           ["advert_id"]),
     _tool("wb_advert_deposit",
           "Top up campaign budget. source: 0=account, 1=balance, 3=bonuses (пополнить бюджет).",
-          {"advert_id": {"type": "integer"}, "amount": {"type": "integer", "description": "Сумма в рублях"},
+          {"advert_id": {"type": "integer"}, "amount": {"type": "integer", "description": "amount, RUB"},
            "source": {"type": "integer", "default": 0}},
           ["advert_id", "amount"]),
     _tool("wb_advert_costs",
@@ -370,7 +378,7 @@ TOOLS = [
     _tool("wb_advert_clusters_stats",
           "Search cluster stats for a period; daily=true for per-day rows (статистика кластеров).",
           {"advert_id": {"type": "integer"}, "date_from": {"type": "string"}, "date_to": {"type": "string"},
-           "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр артикулов (опц.)"},
+           "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "offer_id filter"},
            "daily": {"type": "boolean", "default": False}},
           ["advert_id", "date_from", "date_to"]),
     _tool("wb_advert_cluster_bids",
@@ -380,8 +388,8 @@ TOOLS = [
           ["bids"]),
     _tool("wb_advert_minus_phrases",
           "Campaign minus-phrases: read without norm_queries, set with them. WB has no plus-phrases since 2026 (минус-фразы).",
-          {"advert_id": {"type": "integer"}, "nm_id": {"type": "integer", "description": "Артикул"},
-           "norm_queries": {"type": "array", "items": {"type": "string"}, "description": "Установить минус-фразы (опц.; без него — чтение)"}},
+          {"advert_id": {"type": "integer"}, "nm_id": {"type": "integer", "description": "offer_id"},
+           "norm_queries": {"type": "array", "items": {"type": "string"}, "description": "set minus-phrases; omit to read"}},
           ["advert_id"]),
     _tool("wb_advert_payments",
           "Ad account top-up history for a period, dates YYYY-MM-DD (пополнения счёта).",
@@ -396,20 +404,20 @@ TOOLS = [
     _tool("wb_cards_move_nm",
           "Merge/split cards, max 30 nmID. target_imt set = merge into that imtID, unset = split (объединить карточки).",
           {"nm_ids": {"type": "array", "items": {"type": "integer"}},
-           "target_imt": {"type": "integer", "description": "imtID для объединения (опц.; без него — разъединение)"}},
+           "target_imt": {"type": "integer", "description": "imtID to merge into; omit to split"}},
           ["nm_ids"]),
     _tool("wb_card_add_nomenclature",
           "Add a nomenclature/size to an existing card by imtID (добавить размер).",
           {"imt_id": {"type": "integer"},
-           "cards_to_add": {"type": "array", "items": {"type": "object"}, "description": "Массив новых номенклатур"}},
+           "cards_to_add": {"type": "array", "items": {"type": "object"}, "description": "new nomenclatures"}},
           ["imt_id", "cards_to_add"]),
     _tool("wb_categories_parent",
           "All parent product categories (родительские категории).",
-          {"locale": {"type": "string", "description": "ru | en | zh (по умолч. ru)"}}),
+          {"locale": {"type": "string", "description": "ru | en | zh, default ru"}}),
     _tool("wb_media_upload_file",
           "Upload media as a FILE by URL, server downloads and sends. photo_number from 1, video = 1 (загрузить фото файлом).",
           {"nm_id": {"type": "integer"}, "photo_number": {"type": "integer"},
-           "file_url": {"type": "string", "description": "URL файла для скачивания"}},
+           "file_url": {"type": "string", "description": "file URL"}},
           ["nm_id", "photo_number", "file_url"]),
 
     # === FBS: маркировка (КИЗ), пропуска, короба ===
@@ -420,7 +428,7 @@ TOOLS = [
           "[P0] Set FBS order marking: meta_type = sgtin|uin|imei|gtin|expiration. Only in status confirm (маркировка, Честный знак).",
           {"order_id": {"type": "integer"},
            "meta_type": {"type": "string", "enum": ["sgtin", "uin", "imei", "gtin", "expiration"]},
-           "value": {"description": "sgtin — массив Data Matrix; uin/imei/gtin — строка; expiration — dd.mm.yyyy"}},
+           "value": {"description": "sgtin: Data Matrix array; uin/imei/gtin: string; expiration: dd.mm.yyyy"}},
           ["order_id", "meta_type", "value"]),
     _tool("wb_order_meta_delete",
           "Delete FBS order meta by key: imei|uin|gtin|sgtin (удалить маркировку).",
@@ -440,7 +448,7 @@ TOOLS = [
     _tool("wb_orders_archive",
           "Archived FBS orders for a period: finished or cancelled (архив заказов).",
           {"date_from": {"type": "string", "description": "RFC3339"},
-           "date_to": {"type": "string", "description": "RFC3339 (опц.)"},
+           "date_to": {"type": "string", "description": "RFC3339"},
            "limit": {"type": "integer", "default": 1000}},
           ["date_from"]),
     _tool("wb_supply_order_ids",
@@ -503,7 +511,7 @@ TOOLS = [
           "[P0] Change DBS order status: action = confirm|deliver|receive|reject|cancel. receive/reject need the buyer code (статус DBS-заказа).",
           {"order_id": {"type": "integer"},
            "action": {"type": "string", "enum": ["confirm", "deliver", "receive", "reject", "cancel"]},
-           "code": {"type": "string", "description": "Код подтверждения (для receive/reject)"}},
+           "code": {"type": "string", "description": "buyer code, for receive/reject"}},
           ["order_id", "action"]),
     _tool("wb_dbs_order_meta_get",
           "DBS order meta (метаданные DBS).",
@@ -512,7 +520,7 @@ TOOLS = [
           "DBS order marking: sgtin|uin|imei|gtin, status confirm (маркировка DBS).",
           {"order_id": {"type": "integer"},
            "meta_type": {"type": "string", "enum": ["sgtin", "uin", "imei", "gtin"]},
-           "value": {"description": "sgtin — массив; остальное — строка"}},
+           "value": {"description": "sgtin: array; others: string"}},
           ["order_id", "meta_type", "value"]),
     _tool("wb_dbs_order_meta_delete",
           "Delete DBS order meta by key (удалить маркировку DBS).",
@@ -547,7 +555,7 @@ TOOLS = [
           "Click-and-collect marking: sgtin|uin|imei|gtin, status confirm (маркировка самовывоза).",
           {"order_id": {"type": "integer"},
            "meta_type": {"type": "string", "enum": ["sgtin", "uin", "imei", "gtin"]},
-           "value": {"description": "sgtin — массив; остальное — строка"}},
+           "value": {"description": "sgtin: array; others: string"}},
           ["order_id", "meta_type", "value"]),
     _tool("wb_cc_order_meta_delete",
           "Delete click-and-collect meta by key (удалить маркировку).",
@@ -588,7 +596,7 @@ TOOLS = [
           ["date_from", "date_to"]),
     _tool("wb_analytics_warehouse_measurements",
           "How WB measured your goods at the warehouse; compare with declared to explain deductions (замеры габаритов).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр (опц.)"}}),
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "filter"}}),
     _tool("wb_analytics_grouped_history",
           "Sales funnel by product groups, per day, compares periods (воронка по группам).",
           {"nm_ids": {"type": "array", "items": {"type": "integer"}},
@@ -597,13 +605,13 @@ TOOLS = [
           ["nm_ids", "date_from", "date_to"]),
     _tool("wb_nm_report",
           "Per-nmID report: revenue, orders, returns, conversions. Task-based, waits up to 3 min, kept 3 days (отчёт по номенклатуре).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр (опц.)"},
-           "date_from": {"type": "string", "description": "YYYY-MM-DD (опц.)"},
-           "date_to": {"type": "string", "description": "(опц.)"}}),
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "filter"},
+           "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+           "date_to": {"type": "string"}}),
     _tool("wb_analytics_stocks_sizes",
           "Stock and turnover report split by size, finds dead sizes (остатки по размерам, неликвид).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр (опц.)"},
-           "date_from": {"type": "string", "description": "(опц.)"}, "date_to": {"type": "string", "description": "(опц.)"},
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "filter"},
+           "date_from": {"type": "string"}, "date_to": {"type": "string"},
            "limit": {"type": "integer", "default": 100}}),
     _tool("wb_search_table_details",
           "Search analytics per product: positions and conversions by query. Requires Jam (поисковая аналитика).",
@@ -615,7 +623,7 @@ TOOLS = [
           ["body"]),
     _tool("wb_search_product_orders",
           "Orders and positions by search query for a product, ≤7 days. Requires Jam (заказы по запросам).",
-          {"nm_id": {"type": "integer"}, "search_texts": {"type": "array", "items": {"type": "string"}, "description": "1..30 запросов"},
+          {"nm_id": {"type": "integer"}, "search_texts": {"type": "array", "items": {"type": "string"}, "description": "1..30 queries"},
            "date_from": {"type": "string"}, "date_to": {"type": "string"}},
           ["nm_id", "search_texts", "date_from", "date_to"]),
 
@@ -625,13 +633,13 @@ TOOLS = [
     _tool("wb_feedbacks_actions",
           "Complain about a feedback or report a product problem, codes from supplier-valuations (жалоба на отзыв).",
           {"feedback_id": {"type": "string"},
-           "feedback_valuation": {"type": "integer", "description": "Причина жалобы на отзыв (опц.)"},
-           "product_valuation": {"type": "integer", "description": "Проблема товара (опц.)"}},
+           "feedback_valuation": {"type": "integer", "description": "complaint reason"},
+           "product_valuation": {"type": "integer", "description": "product problem"}},
           ["feedback_id"]),
     _tool("wb_feedbacks_archive",
           "Archived feedbacks, previously answered, unlike wb_feedbacks_list (архив отзывов).",
           {"take": {"type": "integer", "default": 50}, "skip": {"type": "integer", "default": 0},
-           "nm_id": {"type": "integer", "description": "Фильтр по nmID (опц.)"}}),
+           "nm_id": {"type": "integer", "description": "nmID filter"}}),
     _tool("wb_feedbacks_pins",
           "Pinned feedbacks shown first on the card (закреплённые отзывы)."),
     _tool("wb_feedbacks_pins_count",
@@ -652,11 +660,11 @@ TOOLS = [
           {"feedback_id": {"type": "string"}}, ["feedback_id"]),
     _tool("wb_feedbacks_count_period",
           "Feedback count for a period, Unix ts, isAnswered filter (число отзывов за период).",
-          {"date_from": {"type": "integer", "description": "Unix ts (опц.)"}, "date_to": {"type": "integer"},
+          {"date_from": {"type": "integer", "description": "Unix ts"}, "date_to": {"type": "integer"},
            "is_answered": {"type": "boolean"}}),
     _tool("wb_questions_count_period",
           "Question count for a period, Unix ts, isAnswered filter (число вопросов за период).",
-          {"date_from": {"type": "integer", "description": "Unix ts (опц.)"}, "date_to": {"type": "integer"},
+          {"date_from": {"type": "integer", "description": "Unix ts"}, "date_to": {"type": "integer"},
            "is_answered": {"type": "boolean"}}),
 
     # === РЕКЛАМА: расширение ===
@@ -673,13 +681,13 @@ TOOLS = [
     # === P0: ТАРИФЫ ЛОГИСТИКИ И ХРАНЕНИЯ ===
     _tool("wb_tariffs_box",
           "[P0] Box logistics tariffs for FBO; tariff growth eats margin (тарифы логистики).",
-          {"date": {"type": "string", "description": "Дата YYYY-MM-DD (опц., по умолчанию сегодня)"}}),
+          {"date": {"type": "string", "description": "YYYY-MM-DD, default today"}}),
     _tool("wb_tariffs_pallet",
           "Pallet logistics tariffs for FBO (тарифы палет).",
-          {"date": {"type": "string", "description": "Дата YYYY-MM-DD (опц.)"}}),
+          {"date": {"type": "string", "description": "YYYY-MM-DD"}}),
     _tool("wb_tariffs_return",
           "[P0] Reverse logistics tariffs for returns, a hidden cost at high return rates (тарифы возвратов).",
-          {"date": {"type": "string", "description": "Дата YYYY-MM-DD (опц.)"}}),
+          {"date": {"type": "string", "description": "YYYY-MM-DD"}}),
     _tool("wb_tariffs_commission",
           "[P0] WB commissions by category for FBO, FBS, DBS; input for unit economics (комиссии)."),
     _tool("wb_fbw_transit_tariffs",
@@ -694,8 +702,8 @@ TOOLS = [
     # === P1: АНАЛИТИКА ===
     _tool("wb_analytics_detail",
           "Sales funnel per product: views, clicks, cart, orders, revenue, conversions, vs previous period. Limit 3 req/min (воронка продаж).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Список nmID (опц.)"},
-           "brand_names": {"type": "array", "items": {"type": "string"}, "description": "Бренды (опц.)"},
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "nmID list"},
+           "brand_names": {"type": "array", "items": {"type": "string"}, "description": "brands"},
            "date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"},
            "limit": {"type": "integer", "default": 100}},
           ["date_from", "date_to"]),
@@ -707,7 +715,7 @@ TOOLS = [
     _tool("wb_analytics_stocks",
           "Interactive stock and turnover report: healthy, scarce and dead goods (остатки, оборачиваемость).",
           {"date_from": {"type": "string"}, "date_to": {"type": "string"},
-           "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр (опц.)"},
+           "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "filter"},
            "limit": {"type": "integer", "default": 100}},
           ["date_from", "date_to"]),
     _tool("wb_warehouse_remains",
@@ -722,17 +730,17 @@ TOOLS = [
           ["date_from", "date_to"]),
     _tool("wb_banned_products",
           "[P0] Blocked or shadowed cards hidden from the catalogue — lost sales (заблокированные товары).",
-          {"shadowed": {"type": "boolean", "default": False, "description": "true = скрытые, false = заблокированные"}}),
+          {"shadowed": {"type": "boolean", "default": False, "description": "true = shadowed, false = blocked"}}),
     _tool("wb_deductions",
           "Deductions for substitutions and wrong contents (удержания за подмены).",
           {"date_to": {"type": "string", "description": "YYYY-MM-DD"},
-           "date_from": {"type": "string", "description": "(опц.)"},
+           "date_from": {"type": "string"},
            "limit": {"type": "integer", "default": 100}},
           ["date_to"]),
     _tool("wb_search_report",
           "[P0] Search query report: views, clicks, search positions. Requires Jam. Limit 3 req/min (поисковые запросы, видимость).",
           {"date_from": {"type": "string"}, "date_to": {"type": "string"},
-           "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр (опц.)"},
+           "nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "filter"},
            "limit": {"type": "integer", "default": 30}},
           ["date_from", "date_to"]),
     _tool("wb_search_texts",
@@ -754,7 +762,7 @@ TOOLS = [
     _tool("wb_orders_list",
           "All orders for a period (заказы за период).",
           {"date_from": {"type": "string", "description": "RFC3339 (2024-01-01T00:00:00Z)"},
-           "date_to": {"type": "string", "description": "RFC3339 (опц.)"},
+           "date_to": {"type": "string", "description": "RFC3339"},
            "limit": {"type": "integer", "default": 1000}},
           ["date_from"]),
     _tool("wb_orders_status",
@@ -803,18 +811,18 @@ TOOLS = [
           ["date_from"]),
     _tool("wb_stats_orders",
           "Order statistics including cancellations; for cancel and return analysis (заказы, отмены).",
-          {"date_from": {"type": "string"}, "flag": {"type": "integer", "default": 0, "description": "1 = только обновлённые"}},
+          {"date_from": {"type": "string"}, "flag": {"type": "integer", "default": 0, "description": "1 = updated only"}},
           ["date_from"]),
     _tool("wb_stats_stocks",
           "[P0] Current stock across ALL WB warehouses, limit 1000. nm_ids filters by article. Stock without sales means overpaid storage (остатки).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр по артикулам (опц.)"},
+          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "offer_id filter"},
            "limit": {"type": "integer", "default": 1000}}),
 
     # === P1: ОТЗЫВЫ И ВОПРОСЫ ===
     _tool("wb_feedbacks_list",
           "Feedback list. Unanswered negatives cut rating and conversion (отзывы).",
-          {"is_answered": {"type": "boolean", "description": "Фильтр: true=отвеченные, false=неотвеченные (опц.)"},
-           "nm_id": {"type": "integer", "description": "Фильтр по nmID товара (опц.)"},
+          {"is_answered": {"type": "boolean", "description": "true = answered, false = unanswered"},
+           "nm_id": {"type": "integer", "description": "nmID filter"},
            "take": {"type": "integer", "default": 50}}),
     _tool("wb_feedbacks_count",
           "Count of unanswered feedbacks (неотвеченные отзывы)."),
@@ -827,8 +835,8 @@ TOOLS = [
           "Seller rating of the shop (рейтинг продавца)."),
     _tool("wb_questions_list",
           "Buyer questions list (вопросы покупателей).",
-          {"is_answered": {"type": "boolean", "description": "Фильтр (опц.)"},
-           "nm_id": {"type": "integer", "description": "Фильтр по nmID (опц.)"},
+          {"is_answered": {"type": "boolean", "description": "filter"},
+           "nm_id": {"type": "integer", "description": "nmID filter"},
            "take": {"type": "integer", "default": 50}}),
     _tool("wb_questions_count",
           "Count of unanswered questions (неотвеченные вопросы)."),
@@ -842,12 +850,12 @@ TOOLS = [
     _tool("wb_returns_list",
           "Buyer return claims. is_archive=false = pending, NEED an answer; true = archive. actions[] lists allowed actions (возвраты, заявки).",
           {"is_archive": {"type": "boolean", "default": False},
-           "nm_id": {"type": "integer", "description": "Фильтр по товару (опц.)"},
+           "nm_id": {"type": "integer", "description": "product filter"},
            "limit": {"type": "integer", "default": 200}}),
     _tool("wb_return_answer",
           "Answer a return claim. action strictly from the claim's actions[]: approve1 (defect check at WB), approve2 (take the item back), autorefund1 (refund without return), reject1/reject2/reject3 (WB refusal templates), rejectcustom (needs comment) (ответ на возврат).",
           {"claim_id": {"type": "string"}, "action": {"type": "string"},
-           "comment": {"type": "string", "description": "Для rejectcustom (опц.)"}},
+           "comment": {"type": "string", "description": "for rejectcustom"}},
           ["claim_id", "action"]),
     _tool("wb_goods_return_report",
           "Analytics report on goods returned to the seller, max 31 days (отчёт по возвратам).",
@@ -859,12 +867,12 @@ TOOLS = [
           "Seller warehouses (склады продавца)."),
     _tool("wb_warehouse_create",
           "Create a seller warehouse for FBS (создать склад).",
-          {"name": {"type": "string"}, "address": {"type": "string", "description": "(опц.)"}},
+          {"name": {"type": "string"}, "address": {"type": "string"}},
           ["name"]),
     _tool("wb_warehouse_update",
           "Update a seller warehouse (обновить склад).",
-          {"warehouse_id": {"type": "integer"}, "name": {"type": "string", "description": "(опц.)"},
-           "address": {"type": "string", "description": "(опц.)"}},
+          {"warehouse_id": {"type": "integer"}, "name": {"type": "string"},
+           "address": {"type": "string"}},
           ["warehouse_id"]),
     _tool("wb_warehouse_delete",
           "Delete a seller warehouse (удалить склад).",
@@ -889,7 +897,7 @@ TOOLS = [
     _tool("wb_fbw_supplies",
           "FBW supplies to WB warehouses, read-only; creation lives in the seller portal (поставки FBW).",
           {"limit": {"type": "integer", "default": 100}, "offset": {"type": "integer", "default": 0},
-           "status_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр по статусам (опц.)"}}),
+           "status_ids": {"type": "array", "items": {"type": "integer"}, "description": "status filter"}}),
     _tool("wb_fbw_supply_detail",
           "FBW supply details (детали поставки FBW).",
           {"supply_id": {"type": "integer"}},
@@ -901,20 +909,20 @@ TOOLS = [
     _tool("wb_fbw_acceptance_options",
           "Warehouses and packaging types available for an FBW supply, by barcodes (варианты приёмки).",
           {"items": {"type": "array", "items": {"type": "object"}, "description": "[{barcode, quantity}, ...]"},
-           "warehouse_id": {"type": "integer", "description": "Конкретный склад (опц.)"}},
+           "warehouse_id": {"type": "integer", "description": "one warehouse"}},
           ["items"]),
     _tool("wb_fbw_warehouses",
           "WB warehouses for FBW supplies (склады FBW)."),
     _tool("wb_acceptance_coefficients",
           "[P0] Warehouse acceptance coefficients for 14 days. Acceptance works at coefficient 0 or 1 with allowUnload=true; x2-x7 means multiplied acceptance cost (коэффициенты приёмки).",
-          {"warehouse_ids": {"type": "array", "items": {"type": "integer"}, "description": "Фильтр складов (опц.)"}}),
+          {"warehouse_ids": {"type": "array", "items": {"type": "integer"}, "description": "warehouse filter"}}),
 
     # === P2: ОБРАЩЕНИЯ ПОКУПАТЕЛЕЙ ===
     _tool("wb_buyer_chats",
           "Buyer chats, includes replySign for answering. May hold complaints and IP-holder claims (чаты с покупателями)."),
     _tool("wb_chat_events",
           "Chat events, new messages. Cursor pagination: first call without next, then next from the response (события чатов).",
-          {"next_cursor": {"type": "integer", "description": "Курсор из предыдущего ответа (опц.)"}}),
+          {"next_cursor": {"type": "integer", "description": "cursor from previous response"}}),
     _tool("wb_chat_send",
           "Send a message to a buyer chat, ≤1000 chars. reply_sign comes from wb_buyer_chats (написать покупателю).",
           {"reply_sign": {"type": "string"}, "message": {"type": "string"}},
@@ -929,13 +937,13 @@ TOOLS = [
           "Document categories: reconciliation acts, УПД, invoices (категории документов)."),
     _tool("wb_documents_list",
           "Seller financial documents: acts, УПД, notices. Needed for accounting (документы, бухгалтерия).",
-          {"date_from": {"type": "string", "description": "Дата начала (опц.)"},
-           "date_to": {"type": "string", "description": "Дата конца (опц.)"},
-           "category_id": {"type": "integer", "description": "ID категории из wb_documents_categories (опц.)"},
+          {"date_from": {"type": "string", "description": "start date"},
+           "date_to": {"type": "string", "description": "end date"},
+           "category_id": {"type": "integer", "description": "category id from wb_documents_categories"},
            "limit": {"type": "integer", "default": 100}}),
     _tool("wb_document_download",
           "Download one document, PDF/XML, by ID (скачать документ).",
-          {"document_id": {"type": "string", "description": "ID документа из wb_documents_list"}},
+          {"document_id": {"type": "string", "description": "document id from wb_documents_list"}},
           ["document_id"]),
     _tool("wb_documents_download_bulk",
           "Download several documents in one request by IDs (скачать документы).",
@@ -947,7 +955,7 @@ TOOLS = [
           "Seller users/staff (пользователи, сотрудники)."),
     _tool("wb_users_invite",
           "Invite a user. role: admin|manager|analyst (пригласить сотрудника).",
-          {"email": {"type": "string"}, "role": {"type": "string", "description": "admin|manager|analyst (опц.)"}},
+          {"email": {"type": "string"}, "role": {"type": "string", "description": "admin|manager|analyst"}},
           ["email"]),
 
     # === ДИАГНОСТИКА ===
@@ -958,11 +966,11 @@ TOOLS = [
     Tool(
         name="wb_degradations",
         description="Tool degradations: which MCP tools used to work and now fail steadily, signalling a WB API change. No parameters (деградации).",
-        inputSchema={"type": "object", "properties": {}, "required": []},
+        inputSchema={"type": "object", "properties": {}},
     ),
     _tool("wb_api_news",
           "WB seller news including API change announcements; check for integration-breaking changes (новости API).",
-          {"from_date": {"type": "string", "description": "Новости с даты YYYY-MM-DD (опц.)"}}),
+          {"from_date": {"type": "string", "description": "news since YYYY-MM-DD"}}),
 ]
 
 
@@ -1552,9 +1560,36 @@ SHOP_DISPATCH: dict[str, Any] = {
 # — отдельная задача, вместе с миграцией с устаревшего SSE-транспорта на
 # Streamable HTTP.
 
+def _visible_tools() -> list[Tool]:
+    """Инструменты для list_tools.
+
+    При одном магазине shop_id убирается из схем: сервер подставит его сам
+    (см. _call_tool_impl), а 200 повторов параметра стоят ~3400 токенов
+    контекста в каждой сессии. Как только магазинов становится больше одного,
+    параметр возвращается в схемы.
+    """
+    try:
+        from wb_mcp.settings import load_shops
+        if len(load_shops(DATA_DIR)) > 1:
+            return TOOLS
+    except Exception:
+        return TOOLS
+
+    visible: list[Tool] = []
+    for t in TOOLS:
+        props = t.inputSchema.get("properties") or {}
+        if "shop_id" not in props:
+            visible.append(t)
+            continue
+        schema = dict(t.inputSchema)
+        schema["properties"] = {k: v for k, v in props.items() if k != "shop_id"}
+        visible.append(Tool(name=t.name, description=t.description, inputSchema=schema))
+    return visible
+
+
 @app.list_tools()
 async def list_tools() -> list[Tool]:
-    return TOOLS
+    return _visible_tools()
 
 
 @app.call_tool()
