@@ -45,7 +45,7 @@ from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.5.2")
+app = Server("wb-mcp-server", version="2.5.3")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 

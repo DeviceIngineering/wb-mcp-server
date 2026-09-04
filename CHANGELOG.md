@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 Русская версия истории изменений живёт в README.ru.md и в заметках проекта.
 
+## [2.5.3] — 2026-09-04
+
+### Changed
+- Short descriptions now say what the long ones already did: the GitHub repository
+  description, the PyPI summary and `server.json` for the MCP Registry mention that
+  response sizes are measured on a live account and trimmed (770k → 75k tokens). Those
+  three strings are what directories, GitHub search and link previews actually show —
+  the README sections were invisible to all of them.
+
 ## [2.5.2] — 2026-09-04
 
 ### Changed
@@ -88,6 +97,7 @@ All notable changes to this project are documented here. The format follows
 
 See the git history and GitHub releases.
 
+[2.5.3]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.3
 [2.5.2]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.2
 [2.5.1]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.1
 [2.5.0]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.0
