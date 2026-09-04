@@ -45,7 +45,7 @@ from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.5.3")
+app = Server("wb-mcp-server", version="2.5.4")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -719,7 +719,7 @@ TOOLS = [
           {"subject": {"type": "string",
                        "description": "category name substring, case-insensitive (название категории)"}}),
     _tool("wb_fbw_transit_tariffs",
-          "Transit directions for FBW supplies to regions (транзитные тарифы)."),
+          "Transit directions for FBW supplies to regions (транзитные тарифы). Temporarily disabled by WB itself."),
 
     # === P0: ПЛАТНОЕ ХРАНЕНИЕ ===
     _tool("wb_paid_storage",
@@ -940,9 +940,9 @@ TOOLS = [
            "warehouse_id": {"type": "integer", "description": "one warehouse"}},
           ["items"]),
     _tool("wb_fbw_warehouses",
-          "WB warehouses for FBW supplies (склады FBW)."),
+          "WB warehouses for FBW supplies (склады FBW). Temporarily disabled by WB itself — returns an explanation, not data."),
     _tool("wb_acceptance_coefficients",
-          "[P0] Warehouse acceptance coefficients for 14 days. Acceptance works at coefficient 0 or 1 with allowUnload=true; x2-x7 means multiplied acceptance cost (коэффициенты приёмки).",
+          "[P0] Warehouse acceptance coefficients for 14 days; coefficient 0 or 1 with allowUnload=true means acceptance is open, x2-x7 multiplies the cost (коэффициенты приёмки). Temporarily disabled by WB itself.",
           {"warehouse_ids": {"type": "array", "items": {"type": "integer"}, "description": "warehouse filter"}}),
 
     # === P2: ОБРАЩЕНИЯ ПОКУПАТЕЛЕЙ ===

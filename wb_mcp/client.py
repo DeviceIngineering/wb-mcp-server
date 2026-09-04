@@ -94,8 +94,36 @@ class WBClient:
                 await asyncio.sleep(min(wait, 15.0))
                 delay = min(delay * 2, 15.0)
                 continue
+            disabled = self._temporarily_disabled(r)
+            if disabled is not None:
+                return disabled
             r.raise_for_status()
             return r.json() if r.content else {}
+
+    @staticmethod
+    def _temporarily_disabled(response: httpx.Response) -> dict | None:
+        """WB иногда выключает метод целиком, отвечая 404 с пояснением.
+
+        Так сейчас закрыты склады FBW, коэффициенты приёмки и транзитные тарифы:
+        404 с detail «This method is temporarily disabled» и ссылкой на release notes.
+        Это не изменение адреса и не наша ошибка, поэтому вместо голого исключения
+        инструмент отдаёт объяснение — модель скажет пользователю, что метод выключен
+        на стороне WB, а не что «инструмент сломался».
+        """
+        if response.status_code != 404:
+            return None
+        try:
+            detail = str((response.json() or {}).get("detail", ""))
+        except ValueError:
+            return None
+        if "temporarily disabled" not in detail.lower():
+            return None
+        return {
+            "wb_method_disabled": True,
+            "error": "Метод временно отключён самим Wildberries, адрес не менялся.",
+            "detail": detail,
+            "path": str(response.request.url.path),
+        }
 
     async def _post(self, client: httpx.AsyncClient, path: str, body: dict | list | None = None) -> Any:
         return await self._send("POST", client, path, json_body=body if body is not None else {})

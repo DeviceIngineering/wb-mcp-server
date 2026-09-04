@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 Русская версия истории изменений живёт в README.ru.md и в заметках проекта.
 
+## [2.5.4] — 2026-09-04
+
+### Fixed
+- Wildberries switched three supply endpoints off on its own side — FBW warehouses,
+  acceptance coefficients and transit tariffs answer 404 with «This method is
+  temporarily disabled» (release notes 570). They used to surface as a raw HTTP
+  error, which reads like a broken tool. The client now returns the explanation, the
+  three tool descriptions say so, and diagnostics reports them separately from real
+  failures: the server is fine, the vendor turned the method off.
+
 ## [2.5.3] — 2026-09-04
 
 ### Changed
@@ -97,6 +107,7 @@ All notable changes to this project are documented here. The format follows
 
 See the git history and GitHub releases.
 
+[2.5.4]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.4
 [2.5.3]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.3
 [2.5.2]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.2
 [2.5.1]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.1

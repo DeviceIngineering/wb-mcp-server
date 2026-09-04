@@ -189,7 +189,18 @@ async def run_probes(client) -> list[dict[str, Any]]:
     async def _run(category: str, endpoint: str, factory) -> dict[str, Any]:
         start = time.monotonic()
         try:
-            await factory()
+            result = await factory()
+            # WB отвечает 404 с «This method is temporarily disabled» на методах,
+            # которые сам же выключил (склады FBW, коэффициенты приёмки, транзитные
+            # тарифы — release notes 570). Клиент превращает это в объяснение,
+            # а не в исключение: сервер исправен, метод выключен на стороне WB.
+            if isinstance(result, dict) and result.get("wb_method_disabled"):
+                return {
+                    "category": category, "endpoint": endpoint, "ok": True,
+                    "wb_disabled": True, "status_code": 404,
+                    "latency_ms": round((time.monotonic() - start) * 1000, 1),
+                    "note": result.get("detail", "метод временно отключён WB"),
+                }
             return {
                 "category": category, "endpoint": endpoint, "ok": True,
                 "latency_ms": round((time.monotonic() - start) * 1000, 1),
@@ -276,6 +287,10 @@ async def full_diagnostics(shop_id: str, shop_name: str, api_token: str, client)
         warnings.append("⚠️ Токен ПЕСОЧНИЦЫ — данные тестовые")
     if token_info.get("read_only"):
         warnings.append("ℹ️ Токен только на чтение — запись (цены, ответы) недоступна")
+    for p in probes:
+        if p.get("wb_disabled"):
+            warnings.append(f"ℹ️ {p['category']}: метод временно отключён самим WB "
+                            f"({p['endpoint']}) — адрес не менялся, ждём включения")
     for p in probe_fail:
         if p.get("status_code") == 404:
             warnings.append(f"⛔ {p['category']}: 404 на {p['endpoint']} — возможно, WB изменил API")
