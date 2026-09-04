@@ -630,6 +630,8 @@ long: it means WB broke nothing in the meantime. There is no commitment on timin
 If you need a fix urgently, write to **d0371153@gmail.com**.
 Issues and pull requests are welcome and do get reviewed.
 
+Version history: [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

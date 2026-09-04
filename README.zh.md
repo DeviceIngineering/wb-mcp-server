@@ -576,6 +576,8 @@ Wildberries 一直在改 API：端点会新增、改名、下线——
 如果你急需某项修复，请发邮件到 **d0371153@gmail.com**。
 也欢迎提 Issue 和 Pull Request，都会处理。
 
+版本历史：[CHANGELOG.md](CHANGELOG.md)。
+
 ## 许可证
 
 MIT —— 见 [LICENSE](LICENSE)。

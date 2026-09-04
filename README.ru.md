@@ -604,6 +604,8 @@ Wildberries меняет API постоянно: эндпоинты добавл
 Если исправление нужно срочно — напишите на **d0371153@gmail.com**.
 Issues и pull request'ы тоже приветствуются и разбираются.
 
+История версий: [CHANGELOG.md](CHANGELOG.md).
+
 ## Лицензия
 
 MIT — см. [LICENSE](LICENSE).
