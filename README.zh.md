@@ -564,6 +564,20 @@ wb-mcp-server/
 但 Wildberries 和 Ozon 各自统计各自的配额——它们是两个不同的平台。
 多店铺一节里讲的"每个地址能挂多少个账号"，是在每个平台内部各算各的。
 
+## 从 API 访问到可用的调价系统
+
+这个服务器让模型能够访问卖家后台。而**价格应该定成多少**是另一件事，由
+[**ozon-wildberries-repricer**](https://github.com/DeviceIngineering/ozon-wildberries-repricer)
+来完成：它守住基准价，按各平台真实费率计算保本价下限，把会亏本的商品从促销活动中
+撤出，还能通过在真实销量上做受控实验来寻找更优价格。
+
+它在同一处覆盖 Ozon、Wildberries 和 Yandex Market，并且自带面向 LLM 智能体的
+HTTP 控制面——提供模型所缺的那些护栏：会触发 Wildberries 价格隔离的调价被拆成多轮
+逐步完成；下发三分钟后会重新读回价格，因为平台常常对并未执行的修改回一句「成功」；
+多个智能体操作同一份目录时也不会互相覆盖决策。
+
+无需接入店铺即可试用：`npm run demo` 会写入一份合成目录并启动应用。
+
 ## 更新与支持
 
 Wildberries 一直在改 API：端点会新增、改名、下线——
