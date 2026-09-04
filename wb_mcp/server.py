@@ -45,7 +45,7 @@ from wb_mcp.client import WBClient
 
 # ─── Инициализация ────────────────────────────────────────
 
-app = Server("wb-mcp-server", version="2.5.4")
+app = Server("wb-mcp-server", version="2.6.0")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 
@@ -603,10 +603,6 @@ TOOLS = [
           "Sales by region, ≤31 days, YYYY-MM-DD (продажи по регионам).",
           {"date_from": {"type": "string"}, "date_to": {"type": "string"}},
           ["date_from", "date_to"]),
-    _tool("wb_analytics_goods_labeling",
-          "Deductions for missing mandatory labeling, ≤31 days, with violation photos (удержания за маркировку).",
-          {"date_from": {"type": "string"}, "date_to": {"type": "string"}},
-          ["date_from", "date_to"]),
     _tool("wb_analytics_excise",
           "Chestny Znak excise/labeling report. Limit 10 req per 5 hours (Честный знак, КиЗ).",
           {"date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"}},
@@ -615,13 +611,6 @@ TOOLS = [
           "Item rating: card views, cart adds, orders, conversions. Jam subscription. Low conversion signals a card or price problem. Max 1000 nmID (рейтинг товаров, конверсия).",
           {"nm_ids": {"type": "array", "items": {"type": "integer"}}},
           ["nm_ids"]),
-    _tool("wb_analytics_measurement_penalties",
-          "[P0] Deductions for actual dimensions not matching declared ones. Jam subscription. Direct money withheld (удержания за габариты).",
-          {"date_from": {"type": "string", "description": "YYYY-MM-DD"}, "date_to": {"type": "string"}},
-          ["date_from", "date_to"]),
-    _tool("wb_analytics_warehouse_measurements",
-          "How WB measured your goods at the warehouse; compare with declared to explain deductions (замеры габаритов).",
-          {"nm_ids": {"type": "array", "items": {"type": "integer"}, "description": "filter"}}),
     _tool("wb_analytics_grouped_history",
           "Sales funnel by product groups, per day, compares periods (воронка по группам).",
           {"nm_ids": {"type": "array", "items": {"type": "integer"}},
@@ -760,11 +749,12 @@ TOOLS = [
           "[P0] Blocked or shadowed cards hidden from the catalogue — lost sales (заблокированные товары).",
           {"shadowed": {"type": "boolean", "default": False, "description": "true = shadowed, false = blocked"}}),
     _tool("wb_deductions",
-          "Deductions for substitutions and wrong contents (удержания за подмены).",
+          "Deductions for substitutions and wrong contents (удержания за подмены). "
+          "Both dates are required: WB rejects the call without date_from.",
           {"date_to": {"type": "string", "description": "YYYY-MM-DD"},
-           "date_from": {"type": "string"},
+           "date_from": {"type": "string", "description": "YYYY-MM-DD"},
            "limit": {"type": "integer", "default": 100}},
-          ["date_to"]),
+          ["date_to", "date_from"]),
     _tool("wb_search_report",
           "[P0] Search query report: views, clicks, search positions. Requires Jam. Limit 3 req/min (поисковые запросы, видимость).",
           {"date_from": {"type": "string"}, "date_to": {"type": "string"},
@@ -979,14 +969,6 @@ TOOLS = [
           ["document_ids"]),
 
     # === P3: ПОЛЬЗОВАТЕЛИ ===
-    _tool("wb_users_list",
-          "Seller users/staff (пользователи, сотрудники)."),
-    _tool("wb_users_invite",
-          "Invite a user. role: admin|manager|analyst (пригласить сотрудника).",
-          {"email": {"type": "string"}, "role": {"type": "string", "description": "admin|manager|analyst"}},
-          ["email"]),
-
-    # === ДИАГНОСТИКА ===
     _tool("wb_diagnostics",
           "[P0] Full self-diagnostics: ping all WB API hosts, light real requests per category, token analysis (expiry, scopes). Run FIRST when a tool misbehaves — separates a token problem from a category or WB API change (диагностика)."),
     _tool("wb_token_info",
@@ -1184,11 +1166,8 @@ async def _h_analytics_brand_share_brands(c, a): return await c.analytics_brand_
 async def _h_analytics_brand_share_parents(c, a): return await c.analytics_brand_share_parents(
     a["brand"], a["date_from"], a["date_to"], locale=a.get("locale", "ru"))
 async def _h_analytics_region_sale(c, a): return await c.analytics_region_sale(a["date_from"], a["date_to"])
-async def _h_analytics_goods_labeling(c, a): return await c.analytics_goods_labeling(a["date_from"], a["date_to"])
 async def _h_analytics_excise(c, a): return await c.analytics_excise_report(a["date_from"], a["date_to"])
 async def _h_analytics_item_rating(c, a): return await c.analytics_item_rating(a["nm_ids"])
-async def _h_analytics_measurement_penalties(c, a): return await c.analytics_measurement_penalties(a["date_from"], a["date_to"])
-async def _h_analytics_warehouse_measurements(c, a): return await c.analytics_warehouse_measurements(nm_ids=a.get("nm_ids"))
 async def _h_analytics_grouped_history(c, a): return await c.analytics_sales_funnel_grouped_history(
     a["nm_ids"], a["date_from"], a["date_to"], aggregation_level=a.get("aggregation_level", "day"))
 async def _h_nm_report(c, a): return await c.nm_report(
@@ -1253,7 +1232,7 @@ async def _h_warehouse_remains(c, a): return await c.analytics_warehouse_remains
 async def _h_analytics_antifraud(c, a): return await c.analytics_antifraud(a["date"])
 async def _h_analytics_acceptance(c, a): return await c.analytics_acceptance_report(a["date_from"], a["date_to"])
 async def _h_banned_products(c, a): return await c.analytics_banned_products(shadowed=a.get("shadowed", False))
-async def _h_deductions(c, a): return await c.analytics_deductions(a["date_to"], date_from=a.get("date_from"), limit=a.get("limit", 100))
+async def _h_deductions(c, a): return await c.analytics_deductions(a["date_to"], a["date_from"], limit=a.get("limit", 100))
 async def _h_search_report(c, a): return await c.search_report(
     a["date_from"], a["date_to"], nm_ids=a.get("nm_ids"), limit=a.get("limit", 30))
 async def _h_search_texts(c, a): return await c.search_texts_by_product(
@@ -1332,10 +1311,6 @@ async def _h_document_download(c, a): return await c.document_download(a["docume
 async def _h_documents_download_bulk(c, a): return await c.documents_download_bulk(a["document_ids"])
 
 # ── Пользователи ──
-async def _h_users_list(c, a): return await c.users_list()
-async def _h_users_invite(c, a): return await c.users_invite(a["email"], role=a.get("role"))
-
-
 CLIENT_DISPATCH: dict[str, Any] = {
     # Карточки
     "wb_card_errors": _h_card_errors,
@@ -1455,11 +1430,8 @@ CLIENT_DISPATCH: dict[str, Any] = {
     "wb_analytics_brand_share_brands": _h_analytics_brand_share_brands,
     "wb_analytics_brand_share_parents": _h_analytics_brand_share_parents,
     "wb_analytics_region_sale": _h_analytics_region_sale,
-    "wb_analytics_goods_labeling": _h_analytics_goods_labeling,
     "wb_analytics_excise": _h_analytics_excise,
     "wb_analytics_item_rating": _h_analytics_item_rating,
-    "wb_analytics_measurement_penalties": _h_analytics_measurement_penalties,
-    "wb_analytics_warehouse_measurements": _h_analytics_warehouse_measurements,
     "wb_analytics_grouped_history": _h_analytics_grouped_history,
     "wb_nm_report": _h_nm_report,
     "wb_analytics_stocks_sizes": _h_analytics_stocks_sizes,
@@ -1557,8 +1529,6 @@ CLIENT_DISPATCH: dict[str, Any] = {
     "wb_document_download": _h_document_download,
     "wb_documents_download_bulk": _h_documents_download_bulk,
     # Пользователи
-    "wb_users_list": _h_users_list,
-    "wb_users_invite": _h_users_invite,
 }
 
 

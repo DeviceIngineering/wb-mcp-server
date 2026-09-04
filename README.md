@@ -10,12 +10,12 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
-[![MCP tools](https://img.shields.io/badge/MCP%20tools-202-orange.svg)](docs/tools.md)
+[![MCP tools](https://img.shields.io/badge/MCP%20tools-197-orange.svg)](docs/tools.md)
 [![PyPI](https://img.shields.io/pypi/v/wb-mcp-server.svg)](https://pypi.org/project/wb-mcp-server/)
 [![Transport](https://img.shields.io/badge/transport-stdio%20%7C%20SSE-lightgrey.svg)](#how-it-works)
 
 **Run your Wildberries stores from a chat with an AI assistant.**
-202 tools covering the Wildberries Seller API — product cards, prices, ads, shipments,
+197 tools covering the Wildberries Seller API — product cards, prices, ads, shipments,
 reviews, finance, analytics — exposed to Claude, Cursor, Copilot, Gemini CLI and any
 other MCP client. Built for WB sellers (Wildberries is Russia's largest marketplace)
 who run one or several seller accounts and would rather ask a question than click
@@ -24,7 +24,7 @@ through the seller portal.
 Selling on Ozon too? There is [the same server for Ozon](https://github.com/DeviceIngineering/ozon-mcp-server).
 
 The server has been in daily use for more than five months across roughly twenty WB seller
-accounts, with 202 tools. It is the author's own working tool and is updated as the author
+accounts, with 197 tools. It is the author's own working tool and is updated as the author
 needs it — [details here](#updates-and-support).
 
 ```
@@ -40,7 +40,7 @@ You: Reply to every new 5-star review with a thank-you note.
 
 ## What it can do
 
-202 tools, grouped by Wildberries Seller API area.
+197 tools, grouped by Wildberries Seller API area.
 The full numbered list with a description of each one is in **[docs/tools.md](docs/tools.md)**.
 
 | Area | Tools | What it covers |
@@ -220,7 +220,7 @@ claude mcp list      # expected: wildberries ... ✔ Connected
 ## Multi-store and security
 
 **Several seller accounts.** Stores are added on `/shops`; each one gets its own `shop_id`.
-`wb_list_shops` returns the list, and 200 of the 202 tools take `shop_id` as their first
+`wb_list_shops` returns the list, and 200 of the 197 tools take `shop_id` as their first
 parameter (the exceptions are `wb_list_shops` and `wb_degradations`).
 With a single store the parameter can be omitted — the server substitutes the only one available.
 
@@ -370,7 +370,7 @@ than estimated — `scripts/collect_corpus.py` takes a snapshot of read-only too
 (PII masked before anything is written to disk, the corpus stays out of the repo),
 `scripts/measure_corpus.py` reports what it costs.
 
-**Definitions.** 202 tools cost **17 700 tokens** with a single store configured,
+**Definitions.** 197 tools cost **17 700 tokens** with a single store configured,
 down from 27 460. Descriptions are one sentence each, `shop_id` is dropped from the
 schemas when only one store exists (the server fills it in), and empty schema fields
 are not serialised.
@@ -434,7 +434,7 @@ whole — profiles are for them.
   prices and start ad campaigns.
 - **Dispatch through dictionaries, not an if-chain.** `NO_CLIENT_DISPATCH`,
   `CLIENT_DISPATCH` and `SHOP_DISPATCH` map names to handlers, and a test asserts that
-  every tool has one and no handler is orphaned. With 202 tools an if-chain rots quietly.
+  every tool has one and no handler is orphaned. With 197 tools an if-chain rots quietly.
 - **The server diagnoses itself.** `wb_diagnostics` pings every WB host and runs a
   light real request per API category; `wb_degradations` reports which tools used to
   work and now fail steadily. Marketplace APIs change without notice — the question
@@ -511,7 +511,7 @@ Non-obvious details:
 | `HEALTH_CHECK_INTERVAL_MIN` | `30` | background diagnostics interval, `0` disables it |
 | `DATA_DIR` | `/data` | directory holding `shops.json`, `.encryption_key`, `stats.db` |
 | `PORT` | `8001` | HTTP server port |
-| `WB_TOOLSETS` | empty | comma-separated tool profiles: `pricing`, `ads`, `catalog`, `orders`, `analytics`, `feedback`, `finance`; empty means all 202 |
+| `WB_TOOLSETS` | empty | comma-separated tool profiles: `pricing`, `ads`, `catalog`, `orders`, `analytics`, `feedback`, `finance`; empty means all 197 |
 | `WB_MAX_RESPONSE_CHARS` | `60000` | size-guard threshold for a single response |
 
 ## Wildberries API limits
@@ -582,7 +582,7 @@ wb-mcp-server/
 ├── DEPLOY.md                   # deploying to a dedicated machine, moving the data
 ├── docs/                       # client setup guides + tool reference
 └── wb_mcp/
-    ├── server.py       # MCP server: 202 tools, dispatch tables, stdio mode
+    ├── server.py       # MCP server: 197 tools, dispatch tables, stdio mode
     ├── client.py       # HTTP clients for the 14 Wildberries APIs
     ├── app.py          # FastAPI: SSE + web UI + auth + health loop
     ├── diagnostics.py  # pings, JWT decoder, probes, API news

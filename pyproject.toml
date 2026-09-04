@@ -1,7 +1,7 @@
 [project]
 name = "wb-mcp-server"
-version = "2.5.4"
-description = "MCP server for Wildberries Seller API: 202 tools for products, prices, orders, ads, supplies, reviews, finance and analytics, with response sizes measured on a live account and trimmed from 770k to 75k tokens across a 27-response corpus"
+version = "2.6.0"
+description = "MCP server for Wildberries Seller API: 197 tools for products, prices, orders, ads, supplies, reviews, finance and analytics, with response sizes measured on a live account and trimmed from 770k to 75k tokens across a 27-response corpus"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "DeviceIngineering" }]

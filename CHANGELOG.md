@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 Русская версия истории изменений живёт в README.ru.md и в заметках проекта.
 
+## [2.6.0] — 2026-09-04
+
+### Removed
+- Five tools whose endpoints Wildberries deleted — verified against a live account,
+  all four paths answer 404 «path not found» (not the «temporarily disabled» that the
+  supply endpoints return): `wb_analytics_goods_labeling`,
+  `wb_analytics_measurement_penalties`, `wb_analytics_warehouse_measurements`,
+  `wb_users_list`, `wb_users_invite`. A tool that always fails costs tokens and a call
+  to learn nothing. 202 tools → 197.
+
+### Fixed
+- `wb_deductions` never worked: `dateFrom` is required by WB even though the docs mark
+  it optional, and the tool did not send it. Both dates are required now.
+
 ## [2.5.4] — 2026-09-04
 
 ### Fixed
@@ -107,6 +121,7 @@ All notable changes to this project are documented here. The format follows
 
 See the git history and GitHub releases.
 
+[2.6.0]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.6.0
 [2.5.4]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.4
 [2.5.3]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.3
 [2.5.2]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.2

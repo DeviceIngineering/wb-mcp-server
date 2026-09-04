@@ -10,7 +10,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
-[![MCP tools](https://img.shields.io/badge/MCP%20tools-202-orange.svg)](docs/tools.md)
+[![MCP tools](https://img.shields.io/badge/MCP%20tools-197-orange.svg)](docs/tools.md)
 [![PyPI](https://img.shields.io/pypi/v/wb-mcp-server.svg)](https://pypi.org/project/wb-mcp-server/)
 [![Transport](https://img.shields.io/badge/transport-stdio%20%7C%20SSE-lightgrey.svg)](#工作原理)
 
@@ -22,7 +22,7 @@
 
 同时也在 Ozon 上经营？还有[同一套的 Ozon 版服务器](https://github.com/DeviceIngineering/ozon-mcp-server)。
 
-这套服务器已在约二十个 WB 卖家账号上日常使用五个多月，共 202 个工具。
+这套服务器已在约二十个 WB 卖家账号上日常使用五个多月，共 197 个工具。
 它是作者本人的工作工具，按作者自身的需要更新——[具体说明](#更新与支持)。
 
 ```
@@ -38,7 +38,7 @@
 
 ## 功能概览
 
-202 个工具，按 Wildberries Seller API 的业务板块分组。
+197 个工具，按 Wildberries Seller API 的业务板块分组。
 完整编号列表和每个工具的说明见 **[docs/tools.md](docs/tools.md)**。
 
 | 板块 | 工具数 | 覆盖内容 |
@@ -212,7 +212,7 @@ claude mcp list      # 预期输出：wildberries ... ✔ Connected
 ## 多店铺与安全
 
 **多个卖家账号。** 店铺在 `/shops` 页面添加，每个店铺有自己的 `shop_id`。
-`wb_list_shops` 返回店铺列表；202 个工具中有 200 个把 `shop_id` 作为第一个参数
+`wb_list_shops` 返回店铺列表；197 个工具中有 200 个把 `shop_id` 作为第一个参数
 （例外是 `wb_list_shops` 和 `wb_degradations`）。
 只有一个店铺时可以省略该参数，服务器会自动填入唯一可用的那个。
 
@@ -353,7 +353,7 @@ docker compose up -d
 返回样本（个人信息在写入磁盘前即被脱敏，样本目录不进仓库），`scripts/measure_corpus.py`
 计算它们的开销。
 
-**工具定义。** 单店铺配置下，202 个工具占 **17 700 tokens**，此前为 27 460：描述压缩成
+**工具定义。** 单店铺配置下，197 个工具占 **17 700 tokens**，此前为 27 460：描述压缩成
 一句话，只有一个店铺时 `shop_id` 不写进 schema（服务器自动补全），空字段不再序列化。
 
 **返回值。** 真正的问题出在少数几个超大响应上：
@@ -401,7 +401,7 @@ Claude Code 不需要这些：它默认开启 tool search，按需加载 schema�
   但会改变故障的性质：从「没有这个工具」变成「参数用错但真的执行了」，而这些工具里有改价
   和投放广告。
 - **用字典分发，不用 if 链。** 工具名到 handler 的映射由三个字典维护，并有测试保证每个
-  工具都有 handler、没有孤立 handler。202 个工具的 if 链会悄无声息地腐坏。
+  工具都有 handler、没有孤立 handler。197 个工具的 if 链会悄无声息地腐坏。
 - **服务器自我诊断。** `wb_diagnostics` ping 所有 WB 主机并按 API 分类各发一个轻量真实
   请求，`wb_degradations` 报告哪些工具以前能用、现在稳定失败。电商平台改接口从不打招呼，
   「是我的 token 过期了还是 WB 换了地址」必须一次调用就能回答。
@@ -530,7 +530,7 @@ wb-mcp-server/
 ├── DEPLOY.md                   # 部署到独立机器、迁移数据
 ├── docs/                       # 客户端接入说明 + 工具清单
 └── wb_mcp/
-    ├── server.py       # MCP 服务器：202 个工具、分发表、stdio 模式
+    ├── server.py       # MCP 服务器：197 个工具、分发表、stdio 模式
     ├── client.py       # 14 个 Wildberries API 的 HTTP 客户端
     ├── app.py          # FastAPI：SSE + Web 界面 + 鉴权 + 健康检查循环
     ├── diagnostics.py  # ping、JWT 解码、探测请求、API 公告

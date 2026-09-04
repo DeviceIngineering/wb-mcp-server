@@ -900,12 +900,16 @@ class WBClient:
         return await self._get(self._analytics, "/api/v1/analytics/goods-return",
                                {"dateFrom": date_from, "dateTo": date_to})
 
-    async def analytics_deductions(self, date_to: str, date_from: str | None = None,
+    async def analytics_deductions(self, date_to: str, date_from: str,
                                    limit: int = 100, offset: int = 0) -> dict:
-        """GET /api/analytics/v1/deductions — удержания за подмены и неверные вложения."""
-        params: dict[str, Any] = {"dateTo": date_to, "limit": limit, "offset": offset}
-        if date_from:
-            params["dateFrom"] = date_from
+        """GET /api/analytics/v1/deductions — удержания за подмены и неверные вложения.
+
+        dateFrom обязателен, хотя в документации помечен опциональным: без него WB
+        отвечает 400 «invalid parameter: dateTo» — проверено на живом кабинете.
+        """
+        params: dict[str, Any] = {
+            "dateFrom": date_from, "dateTo": date_to, "limit": limit, "offset": offset,
+        }
         return await self._get(self._analytics, "/api/analytics/v1/deductions", params)
 
     async def search_report(self, date_from: str, date_to: str,
@@ -944,22 +948,6 @@ class WBClient:
         if len(nm_ids) > 1000:
             nm_ids = nm_ids[:1000]
         return await self._post(self._analytics, "/api/analytics/v1/item/rating", {"nmIds": nm_ids})
-
-    async def analytics_measurement_penalties(self, date_from: str, date_to: str) -> dict:
-        """GET /api/analytics/v1/measurement/penalties — удержания за несоответствие фактических габаритов.
-        [Джем] КРИТИЧНО: прямые денежные удержания из выручки. YYYY-MM-DD.
-        """
-        return await self._get(self._analytics, "/api/analytics/v1/measurement/penalties",
-                               {"dateFrom": date_from, "dateTo": date_to})
-
-    async def analytics_warehouse_measurements(self, nm_ids: list[int] | None = None) -> dict:
-        """GET /api/analytics/v1/warehouse/measurements — результаты замеров товаров на складе WB.
-        Показывает как WB измерил товар — основа для удержаний за несоответствие.
-        """
-        params: dict[str, Any] = {}
-        if nm_ids:
-            params["nmIds"] = ",".join(str(x) for x in nm_ids)
-        return await self._get(self._analytics, "/api/analytics/v1/warehouse/measurements", params)
 
     async def analytics_sales_funnel_grouped_history(
         self, nm_ids: list[int], date_from: str, date_to: str,
@@ -1372,23 +1360,6 @@ class WBClient:
     # USERS API — Управление пользователями (common-api)
     # ═══════════════════════════════════════════════════════════
 
-    async def users_list(self) -> dict:
-        """GET /api/v1/users (common-api) — список пользователей/сотрудников продавца."""
-        return await self._get(self._tariffs, "/api/v1/users")
-
-    async def users_invite(self, email: str, role: str | None = None) -> dict:
-        """POST /api/v1/invite (common-api) — создать приглашение пользователя.
-        role: admin | manager | analyst (зависит от прав токена).
-        """
-        body: dict[str, Any] = {"email": email}
-        if role:
-            body["role"] = role
-        return await self._post(self._tariffs, "/api/v1/invite", body)
-
-    # ═══════════════════════════════════════════════════════════
-    # BUYER COMMUNICATION — Обращения и чаты
-    # ═══════════════════════════════════════════════════════════
-
     async def buyer_chats_list(self) -> dict:
         """GET /api/v1/seller/chats — список чатов с покупателями (содержит replySign для ответа).
 
@@ -1708,11 +1679,6 @@ class WBClient:
     async def analytics_region_sale(self, date_from: str, date_to: str) -> dict:
         """GET /api/v1/analytics/region-sale — продажи по регионам (≤31 дня, YYYY-MM-DD)."""
         return await self._get(self._analytics, "/api/v1/analytics/region-sale", {
-            "dateFrom": date_from, "dateTo": date_to})
-
-    async def analytics_goods_labeling(self, date_from: str, date_to: str) -> dict:
-        """GET /api/v1/analytics/goods-labeling — удержания за отсутствие маркировки (≤31 дня, с фото)."""
-        return await self._get(self._analytics, "/api/v1/analytics/goods-labeling", {
             "dateFrom": date_from, "dateTo": date_to})
 
     async def search_table_details(self, body: dict) -> dict:
