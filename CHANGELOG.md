@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 Русская версия истории изменений живёт в README.ru.md и в заметках проекта.
 
+## [2.6.1] — 2026-09-05
+
+### Fixed
+- Publishing to the MCP Registry had been failing with 422 since the descriptions were
+  rewritten: the registry caps `server.json` description at 100 characters, and the new
+  one was 153. Shortened, and a test now fails before the workflow does.
+
 ## [2.6.0] — 2026-09-04
 
 ### Removed
@@ -121,6 +128,7 @@ All notable changes to this project are documented here. The format follows
 
 See the git history and GitHub releases.
 
+[2.6.1]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.6.1
 [2.6.0]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.6.0
 [2.5.4]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.4
 [2.5.3]: https://github.com/DeviceIngineering/wb-mcp-server/releases/tag/v2.5.3

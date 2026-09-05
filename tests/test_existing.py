@@ -98,3 +98,16 @@ def test_limit_defaults_match_handlers():
             mismatched.append((tool.name, prop["default"], int(found.group(1))))
 
     assert not mismatched, f"схема обещает не тот лимит (tool, схема, код): {mismatched}"
+
+
+def test_registry_description_fits_the_limit():
+    """MCP Registry отклоняет server.json с description длиннее 100 символов.
+
+    Публикация падала с 422 именно на этом: короткое описание легко перерастает
+    лимит, когда в него добавляют цифры.
+    """
+    import json
+    import pathlib
+
+    manifest = json.loads((pathlib.Path(__file__).resolve().parent.parent / "server.json").read_text())
+    assert len(manifest["description"]) <= 100, len(manifest["description"])
